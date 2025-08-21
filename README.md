@@ -42,11 +42,30 @@ hpo_admin/
 - **Group**: Player groups with levels and creators
 
 ### Question System
-- **Question**: Individual questions (multiple choice or true/false)
+- **Question**: Individual questions (multiple choice or true/false) with card associations and admin tracking
 - **QuestionPackage**: Collections of questions with metadata
 - **OrganizationalPackage**: Organization-specific packages
 - **PublicPackage**: Publicly available packages
 - **PackageAttempt**: Track user attempts and scores
+
+## Key Features
+
+### Card Association System
+- Each question can be associated with a playing card (Spades 3-Ace, Hearts 3-Ace, Clubs 3-Ace, Diamonds 3-Ace)
+- Cards have point values: 7s = 10 points, Jacks = 3, Queens = 2, Kings = 4, Aces = 11, others = 0
+- API endpoint to filter questions by specific card
+- Simple card selection interface without images/styles
+
+### Admin Tracking
+- Questions track which admin user created them via `created_by` field
+- Admin information included in API responses
+- Questions are managed through the HPO Administration interface
+
+### API Features
+- Unauthenticated access to questions and packages
+- JSON responses with comprehensive question data including card information
+- POST endpoint for filtering questions by card
+- Consistent response format across all endpoints
 
 ## API Endpoints
 
@@ -55,10 +74,30 @@ The system provides JSON API endpoints for unauthenticated access:
 ### Questions
 - `GET /api/questions/` - List all questions
 - `GET /api/questions/{id}/` - Get specific question details
+- `POST /api/questions/by-card/` - Get questions by card (payload: `{"card": "S7"}`) *[Available in local development]*
 
 ### Packages
 - `GET /api/packages/` - List all published packages
 - `GET /api/packages/{id}/questions/` - Get questions from a specific package
+
+### Testing the API
+
+#### Local Development
+```bash
+# Test locally (with by-card endpoint)
+curl -X POST http://127.0.0.1:8000/api/questions/by-card/ \
+  -H "Content-Type: application/json" \
+  -d '{"card": "S3"}'
+```
+
+#### Production (Render)
+```bash
+# Test deployed version (basic endpoints only)
+curl https://hpo-admin.onrender.com/api/questions/
+curl https://hpo-admin.onrender.com/api/packages/
+```
+
+**Note**: The deployed version on Render may not include the latest features like the `by-card` endpoint. Redeploy to include recent changes.
 
 ### Example API Response
 ```json
@@ -75,7 +114,15 @@ The system provides JSON API endpoints for unauthenticated access:
             "explanation": "Django is indeed a high-level Python web framework...",
             "points": 1,
             "difficulty": "easy",
-            "created_at": "2025-08-20T21:22:20.526631+00:00"
+            "card": {
+                "id": "S7",
+                "suit": "Spades",
+                "value": "7",
+                "pointValue": 10,
+                "symbol": "♠"
+            },
+            "created_by": "John Admin",
+            "created_at": "2025-08-22T21:22:20.526631+00:00"
         }
     ]
 }
@@ -139,6 +186,8 @@ Access the API endpoints without authentication:
 4. For multiple choice: Add 2-4 options
 5. For true/false: Options are automatically set
 6. Set the correct answer and optional explanation
+7. Optionally associate with a playing card
+8. The creating admin will be automatically tracked
 
 ### Managing Packages
 1. Create questions first
@@ -193,6 +242,9 @@ Access the API endpoints without authentication:
 3. **API Endpoints**: 
    - Questions: `https://your-app.onrender.com/api/questions/`
    - Packages: `https://your-app.onrender.com/api/packages/`
+   - Questions by Card: `https://your-app.onrender.com/api/questions/by-card/` *(requires redeployment with latest code)*
+
+**Important**: After making changes to your code, push to GitHub and redeploy on Render to see the latest features.
 
 ### Environment Variables for Production
 - `DEBUG`: Set to `False`
@@ -252,3 +304,22 @@ This project is for educational and organizational use. Please ensure compliance
 ## Support
 
 For questions or issues, please contact the development team or create an issue in the repository.
+
+## Deployment Status
+
+### Current Deployment Issue
+The deployed version on `https://hpo-admin.onrender.com/` does **not** include the latest features:
+- Missing `POST /api/questions/by-card/` endpoint
+- Missing `created_by` field for questions
+- Missing card association features
+
+### Available on Deployment
+- Basic question listing: `GET /api/questions/`
+- Question details: `GET /api/questions/{id}/`
+- Package listing: `GET /api/packages/`
+- Package questions: `GET /api/packages/{id}/questions/`
+
+### To Update Deployment
+1. Push latest code to GitHub repository
+2. Trigger redeployment on Render
+3. Run migrations if needed for the `created_by` field

@@ -8,6 +8,77 @@ import json
 # Create your views here.
 
 @csrf_exempt
+@require_http_methods(["POST"])
+def questions_by_card_api(request):
+    """
+    API endpoint to get questions by card for unauthenticated users
+    POST payload: {"card": "S3"} or {"card": "HJ"} etc.
+    """
+    try:
+        # Parse JSON payload
+        data = json.loads(request.body)
+        card = data.get('card')
+        
+        if not card:
+            return JsonResponse({
+                'success': False,
+                'error': 'Card parameter is required in the payload'
+            }, status=400)
+        
+        # Validate card format
+        valid_cards = [choice[0] for choice in Question.CARD_CHOICES]
+        if card not in valid_cards:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid card. Valid cards are: {", ".join(valid_cards)}'
+            }, status=400)
+        
+        # Get questions for the specified card
+        questions = Question.objects.filter(card=card)
+        
+        # Convert to JSON format
+        questions_data = []
+        for question in questions:
+            question_data = {
+                'id': question.id,
+                'question_text': question.question_text,
+                'question_type': question.question_type,
+                'options': question.options,
+                'correct_answer': question.correct_answer,
+                'explanation': question.explanation,
+                'points': question.points,
+                'difficulty': question.difficulty,
+                'card': question.card,
+                'card_info': question.get_card_info(),
+                'created_at': question.created_at.isoformat(),
+            }
+            questions_data.append(question_data)
+        
+        # Get card info for the requested card
+        dummy_question = Question(card=card)
+        card_info = dummy_question.get_card_info()
+        
+        return JsonResponse({
+            'success': True,
+            'card': card,
+            'card_info': card_info,
+            'count': len(questions_data),
+            'questions': questions_data
+        })
+    
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON payload'
+        }, status=400)
+    
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+@csrf_exempt
 @require_http_methods(["GET"])
 def questions_api(request):
     """
@@ -29,6 +100,8 @@ def questions_api(request):
                 'explanation': question.explanation,
                 'points': question.points,
                 'difficulty': question.difficulty,
+                'card': question.card,
+                'card_info': question.get_card_info(),
                 'created_at': question.created_at.isoformat(),
             }
             questions_data.append(question_data)
@@ -64,6 +137,8 @@ def question_detail_api(request, question_id):
             'explanation': question.explanation,
             'points': question.points,
             'difficulty': question.difficulty,
+            'card': question.card,
+            'card_info': question.get_card_info(),
             'created_at': question.created_at.isoformat(),
         }
         
@@ -150,6 +225,8 @@ def package_questions_api(request, package_id):
                 'explanation': question.explanation,
                 'points': question.points,
                 'difficulty': question.difficulty,
+                'card': question.card,
+                'card_info': question.get_card_info(),
             }
             questions_data.append(question_data)
         

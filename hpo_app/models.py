@@ -237,6 +237,58 @@ class Question(models.Model):
         default='multiple_choice'
     )
     
+    # Card association
+    CARD_CHOICES = [
+        # Spades
+        ('S3', 'Spades 3'),
+        ('S4', 'Spades 4'),
+        ('S5', 'Spades 5'),
+        ('S6', 'Spades 6'),
+        ('S7', 'Spades 7'),
+        ('SJ', 'Spades Jack'),
+        ('SQ', 'Spades Queen'),
+        ('SK', 'Spades King'),
+        ('SA', 'Spades Ace'),
+        # Hearts
+        ('H3', 'Hearts 3'),
+        ('H4', 'Hearts 4'),
+        ('H5', 'Hearts 5'),
+        ('H6', 'Hearts 6'),
+        ('H7', 'Hearts 7'),
+        ('HJ', 'Hearts Jack'),
+        ('HQ', 'Hearts Queen'),
+        ('HK', 'Hearts King'),
+        ('HA', 'Hearts Ace'),
+        # Clubs
+        ('C3', 'Clubs 3'),
+        ('C4', 'Clubs 4'),
+        ('C5', 'Clubs 5'),
+        ('C6', 'Clubs 6'),
+        ('C7', 'Clubs 7'),
+        ('CJ', 'Clubs Jack'),
+        ('CQ', 'Clubs Queen'),
+        ('CK', 'Clubs King'),
+        ('CA', 'Clubs Ace'),
+        # Diamonds
+        ('D3', 'Diamonds 3'),
+        ('D4', 'Diamonds 4'),
+        ('D5', 'Diamonds 5'),
+        ('D6', 'Diamonds 6'),
+        ('D7', 'Diamonds 7'),
+        ('DJ', 'Diamonds Jack'),
+        ('DQ', 'Diamonds Queen'),
+        ('DK', 'Diamonds King'),
+        ('DA', 'Diamonds Ace'),
+    ]
+    
+    card = models.CharField(
+        max_length=3,
+        choices=CARD_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Associate this question with a playing card"
+    )
+    
     # Store options as JSON for multiple choice questions
     # For true/false, this will be ['True', 'False']
     options = models.JSONField(default=list, blank=True)
@@ -251,6 +303,16 @@ class Question(models.Model):
             ('hard', 'Hard'),
         ],
         default='medium'
+    )
+    
+    # Track who created this question
+    created_by = models.ForeignKey(
+        Admin,
+        on_delete=models.CASCADE,
+        related_name='created_questions',
+        blank=True,
+        null=True,
+        help_text="Admin who created this question"
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -283,6 +345,66 @@ class Question(models.Model):
         if self.question_type == 'true_false':
             return "True / False"
         return " | ".join(self.options)
+    
+    def get_card_info(self):
+        """Return card information as a dictionary"""
+        if not self.card:
+            return None
+        
+        # Card data mapping
+        card_data = {
+            # Spades
+            'S3': {'suit': 'Spades', 'value': '3', 'pointValue': 0, 'symbol': '♠'},
+            'S4': {'suit': 'Spades', 'value': '4', 'pointValue': 0, 'symbol': '♠'},
+            'S5': {'suit': 'Spades', 'value': '5', 'pointValue': 0, 'symbol': '♠'},
+            'S6': {'suit': 'Spades', 'value': '6', 'pointValue': 0, 'symbol': '♠'},
+            'S7': {'suit': 'Spades', 'value': '7', 'pointValue': 10, 'symbol': '♠'},
+            'SJ': {'suit': 'Spades', 'value': 'J', 'pointValue': 3, 'symbol': '♠'},
+            'SQ': {'suit': 'Spades', 'value': 'Q', 'pointValue': 2, 'symbol': '♠'},
+            'SK': {'suit': 'Spades', 'value': 'K', 'pointValue': 4, 'symbol': '♠'},
+            'SA': {'suit': 'Spades', 'value': 'A', 'pointValue': 11, 'symbol': '♠'},
+            # Hearts
+            'H3': {'suit': 'Hearts', 'value': '3', 'pointValue': 0, 'symbol': '♥'},
+            'H4': {'suit': 'Hearts', 'value': '4', 'pointValue': 0, 'symbol': '♥'},
+            'H5': {'suit': 'Hearts', 'value': '5', 'pointValue': 0, 'symbol': '♥'},
+            'H6': {'suit': 'Hearts', 'value': '6', 'pointValue': 0, 'symbol': '♥'},
+            'H7': {'suit': 'Hearts', 'value': '7', 'pointValue': 10, 'symbol': '♥'},
+            'HJ': {'suit': 'Hearts', 'value': 'J', 'pointValue': 3, 'symbol': '♥'},
+            'HQ': {'suit': 'Hearts', 'value': 'Q', 'pointValue': 2, 'symbol': '♥'},
+            'HK': {'suit': 'Hearts', 'value': 'K', 'pointValue': 4, 'symbol': '♥'},
+            'HA': {'suit': 'Hearts', 'value': 'A', 'pointValue': 11, 'symbol': '♥'},
+            # Clubs
+            'C3': {'suit': 'Clubs', 'value': '3', 'pointValue': 0, 'symbol': '♣'},
+            'C4': {'suit': 'Clubs', 'value': '4', 'pointValue': 0, 'symbol': '♣'},
+            'C5': {'suit': 'Clubs', 'value': '5', 'pointValue': 0, 'symbol': '♣'},
+            'C6': {'suit': 'Clubs', 'value': '6', 'pointValue': 0, 'symbol': '♣'},
+            'C7': {'suit': 'Clubs', 'value': '7', 'pointValue': 10, 'symbol': '♣'},
+            'CJ': {'suit': 'Clubs', 'value': 'J', 'pointValue': 3, 'symbol': '♣'},
+            'CQ': {'suit': 'Clubs', 'value': 'Q', 'pointValue': 2, 'symbol': '♣'},
+            'CK': {'suit': 'Clubs', 'value': 'K', 'pointValue': 4, 'symbol': '♣'},
+            'CA': {'suit': 'Clubs', 'value': 'A', 'pointValue': 11, 'symbol': '♣'},
+            # Diamonds
+            'D3': {'suit': 'Diamonds', 'value': '3', 'pointValue': 0, 'symbol': '♦'},
+            'D4': {'suit': 'Diamonds', 'value': '4', 'pointValue': 0, 'symbol': '♦'},
+            'D5': {'suit': 'Diamonds', 'value': '5', 'pointValue': 0, 'symbol': '♦'},
+            'D6': {'suit': 'Diamonds', 'value': '6', 'pointValue': 0, 'symbol': '♦'},
+            'D7': {'suit': 'Diamonds', 'value': '7', 'pointValue': 10, 'symbol': '♦'},
+            'DJ': {'suit': 'Diamonds', 'value': 'J', 'pointValue': 3, 'symbol': '♦'},
+            'DQ': {'suit': 'Diamonds', 'value': 'Q', 'pointValue': 2, 'symbol': '♦'},
+            'DK': {'suit': 'Diamonds', 'value': 'K', 'pointValue': 4, 'symbol': '♦'},
+            'DA': {'suit': 'Diamonds', 'value': 'A', 'pointValue': 11, 'symbol': '♦'},
+        }
+        
+        card_info = card_data.get(self.card, {})
+        card_info['id'] = self.card
+        return card_info
+    
+    def get_card_display(self):
+        """Return a formatted string for card display"""
+        card_info = self.get_card_info()
+        if not card_info:
+            return "No card"
+        return f"{card_info['symbol']} {card_info['value']} ({card_info['suit']})"
     
     def __str__(self):
         return self.question_text[:100] + "..." if len(self.question_text) > 100 else self.question_text

@@ -89,14 +89,18 @@ class PlayerAdmin(admin.ModelAdmin):
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
     form = QuestionAdminForm
-    list_display = ['question_text', 'question_type', 'get_options_display', 'correct_answer', 'difficulty', 'points', 'created_at']
-    list_filter = ['question_type', 'difficulty', 'created_at']
-    search_fields = ['question_text', 'correct_answer']
+    list_display = ['question_text', 'question_type', 'get_options_display', 'get_card_display', 'correct_answer', 'difficulty', 'points', 'created_at']
+    list_filter = ['question_type', 'difficulty', 'card', 'created_at']
+    search_fields = ['question_text', 'correct_answer', 'card']
     readonly_fields = ['created_at', 'updated_at']
     
     def get_options_display(self, obj):
         return obj.get_options_display()
     get_options_display.short_description = 'Options'
+    
+    def get_card_display(self, obj):
+        return obj.get_card_display()
+    get_card_display.short_description = 'Card'
     
     fieldsets = (
         ('Question', {
@@ -114,6 +118,10 @@ class QuestionAdmin(admin.ModelAdmin):
         }),
         ('Scoring & Difficulty', {
             'fields': ('points', 'difficulty')
+        }),
+        ('Card Association', {
+            'fields': ('card',),
+            'description': 'Associate this question with a playing card (optional)'
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),

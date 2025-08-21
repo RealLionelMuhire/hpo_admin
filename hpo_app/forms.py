@@ -12,7 +12,10 @@ class QuestionAdminForm(forms.ModelForm):
     
     class Meta:
         model = Question
-        fields = '__all__'
+        fields = [
+            'question_text', 'question_type', 'card', 'options', 
+            'correct_answer', 'explanation', 'points', 'difficulty'
+        ]
         widgets = {
             'question_text': forms.Textarea(attrs={'rows': 4, 'cols': 80}),
             'explanation': forms.Textarea(attrs={'rows': 3, 'cols': 80}),
@@ -41,6 +44,9 @@ class QuestionAdminForm(forms.ModelForm):
             'class': 'question-type-selector',
             'onchange': 'toggleQuestionFields(this.value)'
         })
+        
+        # Simple card field - no special styling
+        self.fields['card'].help_text = 'Choose a playing card to associate with this question (optional)'
         
         # Set help text based on question type
         if self.instance and self.instance.question_type == 'true_false':
