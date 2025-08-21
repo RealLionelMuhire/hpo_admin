@@ -142,3 +142,10 @@ media/
 
 # Secret key and sensitive settings
 secret_key.txt
+
+# Production files
+.env.production
+*.log
+
+# Render specific
+.render/
