@@ -1,0 +1,82 @@
+.question-form-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.question-form-section h3 {
+    margin-top: 0;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+.multiple-choice-options .form-row {
+    margin-bottom: 10px;
+}
+
+.multiple-choice-options label {
+    font-weight: bold;
+    color: #333;
+}
+
+.multiple-choice-options input[type="text"] {
+    width: 100%;
+    max-width: 500px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.question-type-selector {
+    font-size: 14px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+#id_question_text {
+    width: 100%;
+    min-height: 100px;
+    font-family: inherit;
+}
+
+#id_explanation {
+    width: 100%;
+    min-height: 80px;
+}
+
+.form-row .help {
+    font-style: italic;
+    color: #666;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+.fieldset-description {
+    background-color: #f8f9fa;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-left: 4px solid #007cba;
+    font-style: italic;
+    color: #555;
+}
+
+/* Hide multiple choice options initially for true/false questions */
+.multiple-choice-options {
+    transition: all 0.3s ease;
+}
+
+.multiple-choice-options.hidden {
+    display: none;
+}
+
+/* Styling for points and difficulty fields */
+#id_points {
+    width: 80px;
+}
+
+#id_difficulty {
+    width: 150px;
+}
