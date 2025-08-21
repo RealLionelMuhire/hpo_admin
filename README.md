@@ -171,8 +171,9 @@ curl https://hpo-admin.onrender.com/api/packages/
 
 ### Admin Interface
 1. Access the admin interface at `http://127.0.0.1:8000/admin/`
-2. Login with your superuser credentials
-3. The interface will display as "HPO Administration"
+2. **Note**: Visiting the root URL `http://127.0.0.1:8000/` will automatically redirect to the admin interface
+3. Login with your superuser credentials
+4. The interface will display as "HPO Administration"
 
 ### API Usage
 Access the API endpoints without authentication:
@@ -237,7 +238,7 @@ Access the API endpoints without authentication:
 3. Connect your repository and deploy
 
 ### Post-Deployment
-1. **Access Admin Panel**: `https://your-app.onrender.com/admin/`
+1. **Access Admin Panel**: `https://your-app.onrender.com/admin/` or just `https://your-app.onrender.com/` (auto-redirects)
 2. **Login**: Use the superuser credentials you set
 3. **API Endpoints**: 
    - Questions: `https://your-app.onrender.com/api/questions/`
