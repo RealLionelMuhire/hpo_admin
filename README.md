@@ -15,8 +15,8 @@ A Django-based administration system for managing Health Promotion Organizations
 
 ```
 hpo_admin/
-├── hpo/                    # Main Django project
-│   ├── settings.py         # Django settings
+├── hpo/                   # Main Django project
+│   ├── settings.py        # Django settings
 │   ├── urls.py            # Main URL configuration
 │   └── wsgi.py            # WSGI application
 ├── hpo_app/               # Main application

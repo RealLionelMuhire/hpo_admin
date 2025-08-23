@@ -1,10 +1,12 @@
 from django.contrib import admin
 from django import forms
+from django.db import models
 from .models import (
     Organisation, Admin, Group, Player, Question, QuestionPackage, 
-    OrganizationalPackage, PublicPackage, PackageAttempt
+    OrganizationalPackage, PublicPackage, PackageAttempt,
+    Game, GameParticipant, GameResult, GameResponse
 )
-from .forms import QuestionAdminForm
+from .forms import QuestionAdminForm, PlayerAdminForm
 
 # Customize admin site headers and titles
 admin.site.site_header = "HPO Administration"
@@ -18,13 +20,31 @@ class OrganisationAdmin(admin.ModelAdmin):
     list_filter = ['payment_status', 'created_at']
     search_fields = ['name', 'contact_email', 'registration_number']
     readonly_fields = ['created_at', 'updated_at']
+    
+    # Custom Actions
+    actions = ['activate_payment', 'deactivate_payment', 'set_pending_payment']
+    
+    def activate_payment(self, request, queryset):
+        updated = queryset.update(payment_status='active')
+        self.message_user(request, f'{updated} organizations were activated.')
+    activate_payment.short_description = "Activate payment for selected organizations"
+    
+    def deactivate_payment(self, request, queryset):
+        updated = queryset.update(payment_status='inactive')
+        self.message_user(request, f'{updated} organizations were deactivated.')
+    deactivate_payment.short_description = "Deactivate payment for selected organizations"
+    
+    def set_pending_payment(self, request, queryset):
+        updated = queryset.update(payment_status='pending')
+        self.message_user(request, f'{updated} organizations set to pending payment.')
+    set_pending_payment.short_description = "Set payment status to pending for selected organizations"
 
 
 @admin.register(Admin)
 class AdminAdmin(admin.ModelAdmin):
-    list_display = ['first_name', 'last_name', 'email', 'role', 'organisation', 'access_level']
+    list_display = ['name', 'email', 'role', 'organisation', 'access_level']
     list_filter = ['role', 'access_level', 'organisation', 'created_at']
-    search_fields = ['first_name', 'last_name', 'email', 'employee_id']
+    search_fields = ['name', 'first_name', 'last_name', 'email', 'employee_id']
     readonly_fields = ['created_at', 'updated_at']
     fieldsets = (
         ('Basic Information', {
@@ -48,7 +68,8 @@ class AdminAdmin(admin.ModelAdmin):
 
 @admin.register(Group)
 class GroupAdmin(admin.ModelAdmin):
-    list_display = ['name', 'level', 'created_by', 'created_at']
+    list_display = ['name', 'level', 'created_by', 'created_at'
+]
     list_filter = ['level', 'created_at']
     search_fields = ['name']
     readonly_fields = ['created_at', 'updated_at']
@@ -56,24 +77,105 @@ class GroupAdmin(admin.ModelAdmin):
 
 @admin.register(Player)
 class PlayerAdmin(admin.ModelAdmin):
-    list_display = ['first_name', 'last_name', 'username', 'email', 'organization', 'subscription_type', 'points']
-    list_filter = ['subscription_type', 'subscription_status', 'gender', 'education_level', 'organization']
-    search_fields = ['first_name', 'last_name', 'username', 'email']
-    readonly_fields = ['uuid', 'created_at', 'updated_at']
+    form = PlayerAdminForm
+    list_display = [
+        'player_name', 'username', 'phone', 'age_group', 'province', 
+        'organization', 'subscription_type', 'points', 'games_played', 
+        'games_won', 'win_rate_display', 'total_game_marks'
+    ]
+    list_filter = [
+        'subscription_type', 'subscription_status', 'age_group', 'gender', 
+        'province', 'district', 'education_level', 'organization', 
+        'last_game_result'
+    ]
+    search_fields = ['player_name', 'username', 'email', 'phone']
+    readonly_fields = [
+        'uuid', 'created_at', 'updated_at', 'win_rate', 'answer_accuracy', 
+        'average_marks_per_game', 'last_game_played'
+    ]
     filter_horizontal = ['groups']
+    
+    def win_rate_display(self, obj):
+        return f"{obj.win_rate}%"
+    win_rate_display.short_description = "Win Rate"
+    
+    # Custom Actions
+    actions = [
+        'make_premium', 'make_free', 'reset_points', 'reset_game_stats',
+        'update_to_kigali', 'bulk_edit_age_group'
+    ]
+    
+    def reset_game_stats(self, request, queryset):
+        updated = queryset.update(
+            games_played=0, games_won=0, games_lost=0, total_game_marks=0,
+            questions_answered=0, correct_answers=0, current_win_streak=0,
+            longest_win_streak=0, last_game_played=None, last_game_result=None
+        )
+        self.message_user(request, f'Game statistics reset for {updated} players.')
+    reset_game_stats.short_description = "Reset game statistics for selected players"
+    
+    def make_premium(self, request, queryset):
+        updated = queryset.update(subscription_type='premium')
+        self.message_user(request, f'{updated} players were successfully marked as premium.')
+    make_premium.short_description = "Mark selected players as Premium"
+    
+    def make_free(self, request, queryset):
+        updated = queryset.update(subscription_type='free')
+        self.message_user(request, f'{updated} players were successfully marked as free.')
+    make_free.short_description = "Mark selected players as Free"
+    
+    def reset_points(self, request, queryset):
+        updated = queryset.update(points=0, total_attempts=0)
+        self.message_user(request, f'Points and attempts reset for {updated} players.')
+    reset_points.short_description = "Reset points and attempts for selected players"
+    
+    def update_to_kigali(self, request, queryset):
+        updated = queryset.update(province='Kigali City', district='Gasabo')
+        self.message_user(request, f'{updated} players moved to Kigali City, Gasabo district.')
+    update_to_kigali.short_description = "Move selected players to Kigali City (Gasabo)"
+    
+    def bulk_edit_age_group(self, request, queryset):
+        # This could be enhanced with a custom form
+        updated = queryset.update(age_group='21-29')
+        self.message_user(request, f'{updated} players age group updated to 21-29.')
+    bulk_edit_age_group.short_description = "Set age group to 21-29 for selected players"
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('first_name', 'last_name', 'username', 'email', 'phone')
+            'fields': ('player_name', 'username', 'email', 'phone')
         }),
         ('Personal Details', {
-            'fields': ('date_of_birth', 'gender', 'address', 'education_level', 'interests', 'notes')
+            'fields': ('age_group', 'gender', 'education_level')
+        }),
+        ('Location (Rwanda)', {
+            'fields': ('province', 'district'),
+            'description': 'Select your location in Rwanda'
         }),
         ('Organization & Groups', {
-            'fields': ('organization', 'organisation', 'group', 'groups')
+            'fields': ('organization', 'group', 'groups')
         }),
         ('Subscription & Gaming', {
             'fields': ('subscription_type', 'subscription_status', 'points', 'total_attempts')
+        }),
+        ('Game Statistics', {
+            'fields': (
+                'games_played', 'games_won', 'games_lost', 'total_game_marks',
+                'win_rate', 'average_marks_per_game'
+            ),
+            'description': 'Game performance metrics'
+        }),
+        ('Question Statistics', {
+            'fields': (
+                'questions_answered', 'correct_answers', 'answer_accuracy'
+            ),
+            'description': 'Question answering performance'
+        }),
+        ('Achievements & Streaks', {
+            'fields': (
+                'current_win_streak', 'longest_win_streak', 
+                'last_game_played', 'last_game_result'
+            ),
+            'classes': ('collapse',)
         }),
         ('Emergency Contacts', {
             'fields': ('emergency_contact', 'emergency_phone', 'parent_guardian', 'parent_phone'),
@@ -93,6 +195,39 @@ class QuestionAdmin(admin.ModelAdmin):
     list_filter = ['question_type', 'difficulty', 'card', 'created_at']
     search_fields = ['question_text', 'correct_answer', 'card']
     readonly_fields = ['created_at', 'updated_at']
+    
+    # Custom Actions
+    actions = ['make_easy', 'make_medium', 'make_hard', 'add_points', 'remove_card_association', 'assign_to_spades']
+    
+    def make_easy(self, request, queryset):
+        updated = queryset.update(difficulty='easy')
+        self.message_user(request, f'{updated} questions were marked as Easy.')
+    make_easy.short_description = "Mark selected questions as Easy"
+    
+    def make_medium(self, request, queryset):
+        updated = queryset.update(difficulty='medium')
+        self.message_user(request, f'{updated} questions were marked as Medium.')
+    make_medium.short_description = "Mark selected questions as Medium"
+    
+    def make_hard(self, request, queryset):
+        updated = queryset.update(difficulty='hard')
+        self.message_user(request, f'{updated} questions were marked as Hard.')
+    make_hard.short_description = "Mark selected questions as Hard"
+    
+    def add_points(self, request, queryset):
+        updated = queryset.update(points=models.F('points') + 1)
+        self.message_user(request, f'Added 1 point to {updated} questions.')
+    add_points.short_description = "Add 1 point to selected questions"
+    
+    def remove_card_association(self, request, queryset):
+        updated = queryset.update(card=None)
+        self.message_user(request, f'Removed card association from {updated} questions.')
+    remove_card_association.short_description = "Remove card association from selected questions"
+    
+    def assign_to_spades(self, request, queryset):
+        updated = queryset.update(card='S7')  # Assign to Spades 7 (10 points)
+        self.message_user(request, f'Assigned {updated} questions to Spades 7 card.')
+    assign_to_spades.short_description = "Assign selected questions to Spades 7 card"
     
     def get_options_display(self, obj):
         return obj.get_options_display()
@@ -226,7 +361,7 @@ class PublicPackageAdmin(admin.ModelAdmin):
 class PackageAttemptAdmin(admin.ModelAdmin):
     list_display = ['player', 'package', 'score', 'completed', 'started_at', 'completed_at']
     list_filter = ['completed', 'package__type', 'started_at']
-    search_fields = ['player__username', 'player__first_name', 'player__last_name', 'package__name']
+    search_fields = ['player__username', 'player__player_name', 'package__name']
     readonly_fields = ['started_at']
     
     fieldsets = (
@@ -240,3 +375,170 @@ class PackageAttemptAdmin(admin.ModelAdmin):
             'fields': ('started_at', 'completed_at')
         })
     )
+
+
+# ==================== GAME ADMIN CONFIGURATIONS ====================
+
+@admin.register(Game)
+class GameAdmin(admin.ModelAdmin):
+    list_display = [
+        'match_id_short', 'participant_count', 'team_count', 'status', 
+        'winning_team', 'created_at', 'completed_at'
+    ]
+    list_filter = ['status', 'participant_count', 'winning_team', 'created_at']
+    search_fields = ['match_id']
+    readonly_fields = ['match_id', 'team_count', 'created_at', 'completed_at']
+    
+    fieldsets = (
+        ('Game Information', {
+            'fields': ('match_id', 'participant_count', 'team_count', 'status')
+        }),
+        ('Game Results', {
+            'fields': ('winning_team', 'cards_in_play')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'completed_at')
+        })
+    )
+    
+    def match_id_short(self, obj):
+        return str(obj.match_id)[:8] + "..."
+    match_id_short.short_description = "Match ID"
+    
+    actions = ['mark_completed', 'mark_cancelled']
+    
+    def mark_completed(self, request, queryset):
+        updated = queryset.update(status='completed')
+        self.message_user(request, f'{updated} games marked as completed.')
+    mark_completed.short_description = "Mark selected games as completed"
+    
+    def mark_cancelled(self, request, queryset):
+        updated = queryset.update(status='cancelled')
+        self.message_user(request, f'{updated} games marked as cancelled.')
+    mark_cancelled.short_description = "Mark selected games as cancelled"
+
+
+@admin.register(GameParticipant)
+class GameParticipantAdmin(admin.ModelAdmin):
+    list_display = [
+        'player', 'game_match_id', 'team', 'is_winner', 'marks_earned', 
+        'lost_card', 'question_answered', 'answer_correct'
+    ]
+    list_filter = [
+        'team', 'is_winner', 'question_answered', 'answer_correct', 
+        'game__status', 'joined_at'
+    ]
+    search_fields = ['player__username', 'player__player_name', 'game__match_id']
+    readonly_fields = ['joined_at']
+    
+    fieldsets = (
+        ('Game Participation', {
+            'fields': ('game', 'player', 'team', 'joined_at')
+        }),
+        ('Game Results', {
+            'fields': ('is_winner', 'marks_earned', 'lost_card')
+        }),
+        ('Question Response', {
+            'fields': ('question_answered', 'answer_correct')
+        })
+    )
+    
+    def game_match_id(self, obj):
+        return str(obj.game.match_id)[:8] + "..."
+    game_match_id.short_description = "Game Match ID"
+    
+    actions = ['mark_as_winner', 'mark_as_loser']
+    
+    def mark_as_winner(self, request, queryset):
+        updated = queryset.update(is_winner=True, marks_earned=1)
+        self.message_user(request, f'{updated} participants marked as winners.')
+    mark_as_winner.short_description = "Mark selected participants as winners"
+    
+    def mark_as_loser(self, request, queryset):
+        updated = queryset.update(is_winner=False, marks_earned=0)
+        self.message_user(request, f'{updated} participants marked as losers.')
+    mark_as_loser.short_description = "Mark selected participants as losers"
+
+
+@admin.register(GameResult)
+class GameResultAdmin(admin.ModelAdmin):
+    list_display = [
+        'game_match_id', 'team1_marks', 'team2_marks', 'total_marks', 'created_at'
+    ]
+    list_filter = ['created_at']
+    search_fields = ['game__match_id']
+    readonly_fields = ['created_at']
+    
+    fieldsets = (
+        ('Game Information', {
+            'fields': ('game',)
+        }),
+        ('Team Scores', {
+            'fields': ('team1_marks', 'team2_marks')
+        }),
+        ('Game Summary', {
+            'fields': ('result_summary',)
+        }),
+        ('Timestamp', {
+            'fields': ('created_at',)
+        })
+    )
+    
+    def game_match_id(self, obj):
+        return str(obj.game.match_id)[:8] + "..."
+    game_match_id.short_description = "Game Match ID"
+    
+    def total_marks(self, obj):
+        return obj.team1_marks + obj.team2_marks
+    total_marks.short_description = "Total Marks"
+
+
+@admin.register(GameResponse)
+class GameResponseAdmin(admin.ModelAdmin):
+    list_display = [
+        'participant_player', 'game_match_id', 'response_type', 
+        'is_correct', 'created_at'
+    ]
+    list_filter = [
+        'response_type', 'is_correct', 'created_at',
+        'game__status'
+    ]
+    search_fields = [
+        'participant__player__username', 'participant__player__player_name',
+        'game__match_id', 'question__question_text'
+    ]
+    readonly_fields = ['created_at']
+    
+    fieldsets = (
+        ('Response Information', {
+            'fields': ('game', 'participant', 'response_type', 'created_at')
+        }),
+        ('Fun Fact (Winners)', {
+            'fields': ('fun_fact_text', 'fun_fact_card'),
+            'classes': ('collapse',)
+        }),
+        ('Question Response (Losers)', {
+            'fields': ('question', 'player_answer', 'is_correct'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    def participant_player(self, obj):
+        return obj.participant.player.username
+    participant_player.short_description = "Player"
+    
+    def game_match_id(self, obj):
+        return str(obj.game.match_id)[:8] + "..."
+    game_match_id.short_description = "Game Match ID"
+    
+    actions = ['mark_correct', 'mark_incorrect']
+    
+    def mark_correct(self, request, queryset):
+        updated = queryset.filter(response_type='question').update(is_correct=True)
+        self.message_user(request, f'{updated} question responses marked as correct.')
+    mark_correct.short_description = "Mark selected question responses as correct"
+    
+    def mark_incorrect(self, request, queryset):
+        updated = queryset.filter(response_type='question').update(is_correct=False)
+        self.message_user(request, f'{updated} question responses marked as incorrect.')
+    mark_incorrect.short_description = "Mark selected question responses as incorrect"

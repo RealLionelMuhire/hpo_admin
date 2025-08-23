@@ -116,13 +116,25 @@ class Group(models.Model):
 
 class Player(models.Model):
     """Player model based on playerSchema"""
-    first_name = models.CharField(max_length=100)
-    last_name = models.CharField(max_length=100)
+    player_name = models.CharField(max_length=200, help_text="Full name of the player", default="Unknown Player")
     username = models.CharField(max_length=150, unique=True)
     email = models.EmailField(blank=True, null=True)
     password = models.CharField(max_length=128, validators=[MinLengthValidator(6)])
     phone = models.CharField(max_length=20, blank=True, null=True)
-    date_of_birth = models.DateField(blank=True, null=True)
+    
+    AGE_GROUP_CHOICES = [
+        ('10-15', '10-15'),
+        ('16-21', '16-21'),
+        ('21-29', '21-29'),
+        ('above', 'Above 29'),
+    ]
+    age_group = models.CharField(
+        max_length=10, 
+        choices=AGE_GROUP_CHOICES, 
+        blank=True, 
+        null=True,
+        help_text="Select age group"
+    )
     
     GENDER_CHOICES = [
         ('male', 'Male'),
@@ -135,6 +147,67 @@ class Player(models.Model):
         choices=GENDER_CHOICES, 
         blank=True, 
         null=True
+    )
+    
+    # Rwanda Location Fields
+    PROVINCE_CHOICES = [
+        ('Kigali City', 'Kigali City'),
+        ('Northern Province', 'Northern Province'),
+        ('Southern Province', 'Southern Province'),
+        ('Eastern Province', 'Eastern Province'),
+        ('Western Province', 'Western Province'),
+    ]
+    province = models.CharField(
+        max_length=30,
+        choices=PROVINCE_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Select province in Rwanda"
+    )
+    
+    DISTRICT_CHOICES = [
+        # Kigali City
+        ('Gasabo', 'Gasabo'),
+        ('Kicukiro', 'Kicukiro'),
+        ('Nyarugenge', 'Nyarugenge'),
+        # Northern Province
+        ('Burera', 'Burera'),
+        ('Gakenke', 'Gakenke'),
+        ('Gicumbi', 'Gicumbi'),
+        ('Musanze', 'Musanze'),
+        ('Rulindo', 'Rulindo'),
+        # Southern Province
+        ('Gisagara', 'Gisagara'),
+        ('Huye', 'Huye'),
+        ('Kamonyi', 'Kamonyi'),
+        ('Muhanga', 'Muhanga'),
+        ('Nyamagabe', 'Nyamagabe'),
+        ('Nyanza', 'Nyanza'),
+        ('Nyaruguru', 'Nyaruguru'),
+        ('Ruhango', 'Ruhango'),
+        # Eastern Province
+        ('Bugesera', 'Bugesera'),
+        ('Gatsibo', 'Gatsibo'),
+        ('Kayonza', 'Kayonza'),
+        ('Kirehe', 'Kirehe'),
+        ('Ngoma', 'Ngoma'),
+        ('Nyagatare', 'Nyagatare'),
+        ('Rwamagana', 'Rwamagana'),
+        # Western Province
+        ('Karongi', 'Karongi'),
+        ('Ngororero', 'Ngororero'),
+        ('Nyabihu', 'Nyabihu'),
+        ('Nyamasheke', 'Nyamasheke'),
+        ('Rubavu', 'Rubavu'),
+        ('Rusizi', 'Rusizi'),
+        ('Rutsiro', 'Rutsiro'),
+    ]
+    district = models.CharField(
+        max_length=30,
+        choices=DISTRICT_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Select district in Rwanda"
     )
     
     organization = models.ForeignKey(
@@ -184,8 +257,6 @@ class Player(models.Model):
         null=True
     )
     
-    interests = models.JSONField(default=list, blank=True)  # Array of strings
-    notes = models.TextField(blank=True, null=True)
     password_reset_token = models.CharField(max_length=255, blank=True, null=True)
     password_reset_expires = models.DateTimeField(blank=True, null=True)
     
@@ -206,19 +277,95 @@ class Player(models.Model):
         default='free'
     )
     
-    organisation = models.ForeignKey(
-        Organisation, 
-        on_delete=models.CASCADE, 
-        related_name='organisation_players',
-        blank=True, 
-        null=True
+    # Game-related statistics
+    games_played = models.IntegerField(default=0, help_text="Total number of games played")
+    games_won = models.IntegerField(default=0, help_text="Total number of games won")
+    games_lost = models.IntegerField(default=0, help_text="Total number of games lost")
+    total_game_marks = models.IntegerField(default=0, help_text="Total marks earned from games")
+    questions_answered = models.IntegerField(default=0, help_text="Total questions answered in games")
+    correct_answers = models.IntegerField(default=0, help_text="Total correct answers in games")
+    
+    # Game streaks and achievements
+    current_win_streak = models.IntegerField(default=0, help_text="Current consecutive wins")
+    longest_win_streak = models.IntegerField(default=0, help_text="Longest win streak achieved")
+    
+    # Last game activity
+    last_game_played = models.DateTimeField(blank=True, null=True, help_text="Last time player participated in a game")
+    last_game_result = models.CharField(
+        max_length=10,
+        choices=[
+            ('won', 'Won'),
+            ('lost', 'Lost'),
+        ],
+        blank=True,
+        null=True,
+        help_text="Result of the last game played"
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    @property
+    def win_rate(self):
+        """Calculate win rate percentage"""
+        if self.games_played == 0:
+            return 0.0
+        return round((self.games_won / self.games_played) * 100, 2)
+    
+    @property
+    def answer_accuracy(self):
+        """Calculate answer accuracy percentage"""
+        if self.questions_answered == 0:
+            return 0.0
+        return round((self.correct_answers / self.questions_answered) * 100, 2)
+    
+    @property
+    def average_marks_per_game(self):
+        """Calculate average marks earned per game"""
+        if self.games_played == 0:
+            return 0.0
+        return round(self.total_game_marks / self.games_played, 2)
+    
+    def update_game_stats(self, won=False, marks_earned=0, questions_answered=0, correct_answers=0):
+        """Update player's game statistics after a game"""
+        from django.utils import timezone
+        
+        self.games_played += 1
+        if won:
+            self.games_won += 1
+            self.current_win_streak += 1
+            if self.current_win_streak > self.longest_win_streak:
+                self.longest_win_streak = self.current_win_streak
+            self.last_game_result = 'won'
+        else:
+            self.games_lost += 1
+            self.current_win_streak = 0
+            self.last_game_result = 'lost'
+        
+        self.total_game_marks += marks_earned
+        self.questions_answered += questions_answered
+        self.correct_answers += correct_answers
+        self.last_game_played = timezone.now()
+        self.save()
+    
+    def get_game_history_summary(self):
+        """Get a summary of player's game history"""
+        return {
+            'total_games': self.games_played,
+            'wins': self.games_won,
+            'losses': self.games_lost,
+            'win_rate': self.win_rate,
+            'total_marks': self.total_game_marks,
+            'average_marks_per_game': self.average_marks_per_game,
+            'current_streak': self.current_win_streak,
+            'longest_streak': self.longest_win_streak,
+            'answer_accuracy': self.answer_accuracy,
+            'last_played': self.last_game_played,
+            'last_result': self.last_game_result
+        }
+    
     def __str__(self):
-        return f"{self.first_name} {self.last_name} ({self.username})"
+        return f"{self.player_name} ({self.username})"
     
     class Meta:
         verbose_name = 'Player'
@@ -580,3 +727,163 @@ class PackageAttempt(models.Model):
     class Meta:
         verbose_name = 'Package Attempt'
         verbose_name_plural = 'Package Attempts'
+
+
+class Game(models.Model):
+    """Game session model to track card game matches"""
+    match_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    
+    PARTICIPANT_CHOICES = [
+        (1, '1 Player (vs Computer)'),
+        (2, '2 Players'),
+        (4, '4 Players'),
+        (6, '6 Players'),
+    ]
+    participant_count = models.IntegerField(
+        choices=PARTICIPANT_CHOICES,
+        help_text="Number of participants in the game"
+    )
+    
+    # Team count is calculated based on participants
+    # 1 participant = 1 team (player vs computer)
+    # 2+ participants = 2 teams
+    team_count = models.IntegerField(default=2)
+    
+    # Game status
+    STATUS_CHOICES = [
+        ('waiting', 'Waiting for Players'),
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='waiting')
+    
+    # Winning team (1 or 2, null if game not finished)
+    winning_team = models.IntegerField(blank=True, null=True, choices=[(1, 'Team 1'), (2, 'Team 2')])
+    
+    # Cards used in this game (for tracking which questions might be needed)
+    cards_in_play = models.JSONField(default=list, blank=True, help_text="List of card IDs used in this game")
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    
+    def save(self, *args, **kwargs):
+        """Auto-calculate team count based on participants"""
+        if self.participant_count == 1:
+            self.team_count = 1
+        else:
+            self.team_count = 2
+        super().save(*args, **kwargs)
+    
+    @property
+    def players_per_team(self):
+        """Calculate players per team"""
+        if self.participant_count == 1:
+            return 1
+        return self.participant_count // 2
+    
+    def __str__(self):
+        return f"Game {str(self.match_id)[:8]} - {self.participant_count} players"
+    
+    class Meta:
+        verbose_name = 'Game'
+        verbose_name_plural = 'Games'
+
+
+class GameParticipant(models.Model):
+    """Players participating in a specific game"""
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='participants')
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='game_participations')
+    
+    TEAM_CHOICES = [
+        (1, 'Team 1'),
+        (2, 'Team 2'),
+    ]
+    team = models.IntegerField(choices=TEAM_CHOICES, help_text="Which team the player belongs to")
+    
+    # Game results for this player
+    is_winner = models.BooleanField(default=False)
+    marks_earned = models.IntegerField(default=0, help_text="Marks earned (1 per win)")
+    
+    # If player lost, they get a card and must answer question
+    lost_card = models.CharField(
+        max_length=3,
+        choices=Question.CARD_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Card assigned to losing player"
+    )
+    
+    # Question response tracking
+    question_answered = models.BooleanField(default=False)
+    answer_correct = models.BooleanField(default=False)
+    
+    joined_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.player.username} in Game {str(self.game.match_id)[:8]} (Team {self.team})"
+    
+    class Meta:
+        verbose_name = 'Game Participant'
+        verbose_name_plural = 'Game Participants'
+        unique_together = ['game', 'player']
+
+
+class GameResult(models.Model):
+    """Store game results and responses"""
+    game = models.OneToOneField(Game, on_delete=models.CASCADE, related_name='result')
+    
+    # Team marks (team 1 and team 2 marks)
+    team1_marks = models.IntegerField(default=0)
+    team2_marks = models.IntegerField(default=0)
+    
+    # Game outcome summary
+    result_summary = models.JSONField(
+        default=dict,
+        help_text="Summary of game results, questions asked, answers given"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"Result for Game {str(self.game.match_id)[:8]}"
+    
+    class Meta:
+        verbose_name = 'Game Result'
+        verbose_name_plural = 'Game Results'
+
+
+class GameResponse(models.Model):
+    """Store player responses during game"""
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, related_name='responses')
+    participant = models.ForeignKey(GameParticipant, on_delete=models.CASCADE, related_name='responses')
+    
+    RESPONSE_TYPE_CHOICES = [
+        ('fun_fact', 'Fun Fact (Winner)'),
+        ('question', 'Question (Loser)'),
+    ]
+    response_type = models.CharField(max_length=20, choices=RESPONSE_TYPE_CHOICES)
+    
+    # For winners: fun fact from explanation
+    fun_fact_text = models.TextField(blank=True, null=True)
+    fun_fact_card = models.CharField(max_length=3, blank=True, null=True)
+    
+    # For losers: question to answer
+    question = models.ForeignKey(
+        Question, 
+        on_delete=models.CASCADE, 
+        blank=True, 
+        null=True,
+        related_name='game_responses'
+    )
+    player_answer = models.TextField(blank=True, null=True)
+    is_correct = models.BooleanField(default=False)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.response_type} for {self.participant.player.username} in Game {str(self.game.match_id)[:8]}"
+    
+    class Meta:
+        verbose_name = 'Game Response'
+        verbose_name_plural = 'Game Responses'

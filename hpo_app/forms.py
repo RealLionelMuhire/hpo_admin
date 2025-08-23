@@ -1,6 +1,62 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from .models import Question
+from .models import Question, Player
+
+
+class PlayerAdminForm(forms.ModelForm):
+    class Meta:
+        model = Player
+        fields = '__all__'
+        widgets = {
+            'player_name': forms.TextInput(attrs={'placeholder': 'Enter full name'}),
+            'username': forms.TextInput(attrs={'placeholder': 'Enter username'}),
+            'phone': forms.TextInput(attrs={'placeholder': 'Enter phone number'}),
+            'province': forms.Select(attrs={'onchange': 'filterDistricts(this.value)', 'id': 'id_province'}),
+            'district': forms.Select(attrs={'id': 'id_district'}),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Province-District mapping
+        self.province_districts = {
+            'Kigali City': ['Gasabo', 'Kicukiro', 'Nyarugenge'],
+            'Northern Province': ['Burera', 'Gakenke', 'Gicumbi', 'Musanze', 'Rulindo'],
+            'Southern Province': ['Gisagara', 'Huye', 'Kamonyi', 'Muhanga', 'Nyamagabe', 'Nyanza', 'Nyaruguru', 'Ruhango'],
+            'Eastern Province': ['Bugesera', 'Gatsibo', 'Kayonza', 'Kirehe', 'Ngoma', 'Nyagatare', 'Rwamagana'],
+            'Western Province': ['Karongi', 'Ngororero', 'Nyabihu', 'Nyamasheke', 'Rubavu', 'Rusizi', 'Rutsiro'],
+        }
+        
+        # Add help text for location fields
+        self.fields['province'].help_text = 'Select your province in Rwanda'
+        self.fields['district'].help_text = 'Select your district (filtered based on province)'
+        
+        # Make province and district more user-friendly
+        self.fields['province'].empty_label = '--- Select Province ---'
+        self.fields['district'].empty_label = '--- Select District ---'
+        
+        # If editing existing player with province selected, filter districts
+        if self.instance and self.instance.pk and self.instance.province:
+            district_choices = [('', '--- Select District ---')]
+            for district in self.province_districts.get(self.instance.province, []):
+                district_choices.append((district, district))
+            self.fields['district'].choices = district_choices
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        province = cleaned_data.get('province')
+        district = cleaned_data.get('district')
+        
+        # Validate province-district combination
+        if province and district:
+            valid_districts = self.province_districts.get(province, [])
+            if district not in valid_districts:
+                raise ValidationError(f'District {district} is not valid for {province}')
+        
+        return cleaned_data
+    
+    class Media:
+        js = ('admin/js/player_location_filter.js',)
 
 
 class QuestionAdminForm(forms.ModelForm):
