@@ -1,0 +1,115 @@
+.subtopic-container {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+    background-color: #f9f9f9;
+}
+
+.subtopic-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.subtopic-title {
+    font-weight: bold;
+    color: #333;
+}
+
+.remove-subtopic-btn {
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.remove-subtopic-btn:hover {
+    background-color: #c82333;
+}
+
+.add-subtopic-btn {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 15px;
+    margin-bottom: 15px;
+    font-size: 14px;
+    font-weight: bold;
+    display: inline-block;
+}
+
+.add-subtopic-btn:hover {
+    background-color: #218838;
+    transform: translateY(-1px);
+}
+
+.subtopics-wrapper {
+    border: 1px solid #e1e1e1;
+    border-radius: 6px;
+    padding: 20px;
+    margin: 20px 0;
+    background-color: #fafafa;
+}
+
+.no-subtopics {
+    color: #666;
+    font-style: italic;
+    padding: 20px;
+    text-align: center;
+    background-color: #f9f9f9;
+    border: 1px dashed #ccc;
+    border-radius: 4px;
+    margin-bottom: 15px;
+}
+
+.subtopic-form-row {
+    display: flex;
+    gap: 15px;
+    align-items: flex-start;
+}
+
+.subtopic-name-field {
+    flex: 1;
+}
+
+.subtopic-info-field {
+    flex: 2;
+}
+
+.subtopics-wrapper {
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 20px;
+    background-color: #fafafa;
+    margin-top: 10px;
+}
+
+.subtopics-header {
+    font-size: 16px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    color: #2c3e50;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 5px;
+}
+
+.no-subtopics {
+    color: #7f8c8d;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+    background-color: #ecf0f1;
+    border-radius: 4px;
+}
+
+.field-additional_subtopics {
+    display: none;
+}

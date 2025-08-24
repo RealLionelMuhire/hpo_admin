@@ -1,0 +1,77 @@
+/* Game Content Form CSS */
+
+.field-subtopics_input {
+    position: relative;
+}
+
+.subtopics-preview {
+    margin-top: 10px;
+    padding: 10px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+
+.subtopics-preview h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #495057;
+}
+
+.subtopic-tag {
+    display: inline-block;
+    background: #007cba;
+    color: white;
+    padding: 4px 8px;
+    margin: 2px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.subtopic-tag.empty {
+    background: #6c757d;
+    font-style: italic;
+}
+
+/* Form validation styles */
+.field-subtopics_input .errorlist {
+    color: #dc3545;
+    font-size: 12px;
+    margin-top: 5px;
+}
+
+.field-subtopics_input input.error {
+    border-color: #dc3545;
+}
+
+/* Improved help text */
+.help-text {
+    background: #e7f3ff;
+    border-left: 4px solid #007cba;
+    padding: 8px 12px;
+    margin-top: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+/* Content type specific styling */
+.content-type-educational .form-row {
+    border-left: 4px solid #28a745;
+    padding-left: 15px;
+}
+
+.content-type-historical .form-row {
+    border-left: 4px solid #6f42c1;
+    padding-left: 15px;
+}
+
+.content-type-cultural .form-row {
+    border-left: 4px solid #fd7e14;
+    padding-left: 15px;
+}
+
+.content-type-scientific .form-row {
+    border-left: 4px solid #007cba;
+    padding-left: 15px;
+}

@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from .models import Question, QuestionPackage, Game, GameParticipant, GameResult, GameResponse, Player
+from .models import Question, QuestionPackage, Game, GameParticipant, GameResult, GameResponse, Player, GameContent, Topic, Subtopic
 import json
 import random
 from django.utils import timezone
@@ -379,14 +379,14 @@ def complete_game_api(request):
     POST payload: {
         "match_id": "uuid-string",
         "winning_team": 1,  # 1 or 2
-        "cards_played": ["S3", "HJ", "DA"]  # optional
+        "cards_chosen": ["S3", "HJ"]  # cards chosen by losing team
     }
     """
     try:
         data = json.loads(request.body)
         match_id = data.get('match_id')
         winning_team = data.get('winning_team')
-        cards_played = data.get('cards_played', [])
+        cards_chosen = data.get('cards_chosen', [])
         
         if not match_id:
             return JsonResponse({
@@ -400,6 +400,16 @@ def complete_game_api(request):
                 'error': 'winning_team must be 1 or 2'
             }, status=400)
         
+        # Validate cards_chosen if provided
+        if cards_chosen:
+            valid_cards = [choice[0] for choice in Question.CARD_CHOICES]
+            invalid_cards = [card for card in cards_chosen if card not in valid_cards]
+            if invalid_cards:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Invalid cards: {", ".join(invalid_cards)}. Valid cards are: {", ".join(valid_cards)}'
+                }, status=400)
+        
         try:
             game = Game.objects.get(match_id=match_id, status='active')
         except Game.DoesNotExist:
@@ -412,13 +422,14 @@ def complete_game_api(request):
             # Update game status
             game.status = 'completed'
             game.winning_team = winning_team
-            game.cards_in_play = cards_played
+            game.cards_chosen = cards_chosen
             game.completed_at = timezone.now()
             game.save()
             
             # Update participants and their stats
             team1_marks = 0
             team2_marks = 0
+            losing_players = []
             
             for participant in game.participants.all():
                 if participant.team == winning_team:
@@ -439,13 +450,7 @@ def complete_game_api(request):
                 else:
                     participant.is_winner = False
                     participant.marks_earned = 0
-                    # Assign a random card for the losing player
-                    if cards_played:
-                        participant.lost_card = random.choice(cards_played)
-                    else:
-                        # Pick a random card if none specified
-                        all_cards = [choice[0] for choice in Question.CARD_CHOICES]
-                        participant.lost_card = random.choice(all_cards)
+                    losing_players.append(participant)
                     
                     # Update player game stats for losers (will be updated again when they answer question)
                     participant.player.update_game_stats(
@@ -457,6 +462,23 @@ def complete_game_api(request):
                 
                 participant.save()
             
+            # Assign cards to losing players
+            if cards_chosen and losing_players:
+                # If we have chosen cards, assign them to losing players
+                for i, participant in enumerate(losing_players):
+                    if i < len(cards_chosen):
+                        participant.lost_card = cards_chosen[i]
+                    else:
+                        # If more losers than cards, cycle through the cards
+                        participant.lost_card = cards_chosen[i % len(cards_chosen)]
+                    participant.save()
+            elif losing_players:
+                # If no cards chosen, assign random cards to losing players
+                all_cards = [choice[0] for choice in Question.CARD_CHOICES]
+                for participant in losing_players:
+                    participant.lost_card = random.choice(all_cards)
+                    participant.save()
+            
             # Create game result
             GameResult.objects.create(
                 game=game,
@@ -464,7 +486,7 @@ def complete_game_api(request):
                 team2_marks=team2_marks,
                 result_summary={
                     'winning_team': winning_team,
-                    'cards_played': cards_played,
+                    'cards_chosen': cards_chosen,
                     'completed_at': timezone.now().isoformat()
                 }
             )
@@ -508,76 +530,45 @@ def get_game_responses_api(request, match_id):
         
         for participant in game.participants.all():
             if participant.is_winner:
-                # Winner gets fun fact from losing team's card
-                losing_participants = game.participants.filter(is_winner=False)
-                if losing_participants.exists():
-                    # Get fun fact from a losing player's card
-                    losing_participant = losing_participants.first()
-                    if losing_participant.lost_card:
-                        # Get explanation from questions associated with the card
+                # Winner gets fun fact from chosen cards
+                fun_fact_card = None
+                fun_fact_text = "Congratulations on winning!"
+                
+                # Try to get fun fact from chosen cards
+                if game.cards_chosen:
+                    for card in game.cards_chosen:
                         card_questions = Question.objects.filter(
-                            card=losing_participant.lost_card,
+                            card=card,
                             explanation__isnull=False
                         ).exclude(explanation='')
                         
                         if card_questions.exists():
                             question = card_questions.first()
-                            fun_fact = question.explanation
-                            
-                            # Create response record
-                            response, created = GameResponse.objects.get_or_create(
-                                game=game,
-                                participant=participant,
-                                defaults={
-                                    'response_type': 'fun_fact',
-                                    'fun_fact_text': fun_fact,
-                                    'fun_fact_card': losing_participant.lost_card
-                                }
-                            )
-                            
-                            responses_data.append({
-                                'username': participant.player.username,
-                                'player_name': participant.player.player_name,
-                                'team': participant.team,
-                                'is_winner': True,
-                                'response_type': 'fun_fact',
-                                'fun_fact': fun_fact,
-                                'card': losing_participant.lost_card,
-                                'card_info': Question(card=losing_participant.lost_card).get_card_info()
-                            })
-                        else:
-                            responses_data.append({
-                                'username': participant.player.username,
-                                'player_name': participant.player.player_name,
-                                'team': participant.team,
-                                'is_winner': True,
-                                'response_type': 'fun_fact',
-                                'fun_fact': 'Congratulations on winning!',
-                                'card': None,
-                                'card_info': None
-                            })
-                    else:
-                        responses_data.append({
-                            'username': participant.player.username,
-                            'player_name': participant.player.player_name,
-                            'team': participant.team,
-                            'is_winner': True,
-                            'response_type': 'fun_fact',
-                            'fun_fact': 'Congratulations on winning!',
-                            'card': None,
-                            'card_info': None
-                        })
-                else:
-                    responses_data.append({
-                        'username': participant.player.username,
-                        'player_name': participant.player.player_name,
-                        'team': participant.team,
-                        'is_winner': True,
+                            fun_fact_text = question.explanation
+                            fun_fact_card = card
+                            break
+                
+                # Create response record
+                response, created = GameResponse.objects.get_or_create(
+                    game=game,
+                    participant=participant,
+                    defaults={
                         'response_type': 'fun_fact',
-                        'fun_fact': 'Congratulations on winning!',
-                        'card': None,
-                        'card_info': None
-                    })
+                        'fun_fact_text': fun_fact_text,
+                        'fun_fact_card': fun_fact_card
+                    }
+                )
+                
+                responses_data.append({
+                    'username': participant.player.username,
+                    'player_name': participant.player.player_name,
+                    'team': participant.team,
+                    'is_winner': True,
+                    'response_type': 'fun_fact',
+                    'fun_fact': fun_fact_text,
+                    'card': fun_fact_card,
+                    'card_info': Question(card=fun_fact_card).get_card_info() if fun_fact_card else None
+                })
             
             else:
                 # Loser gets question related to their assigned card
@@ -772,7 +763,7 @@ def get_game_status_api(request, match_id):
             'team_count': game.team_count,
             'status': game.status,
             'winning_team': game.winning_team,
-            'cards_in_play': game.cards_in_play,
+            'cards_chosen': game.cards_chosen,
             'created_at': game.created_at.isoformat(),
             'completed_at': game.completed_at.isoformat() if game.completed_at else None,
             'participants': participants_data
@@ -915,6 +906,996 @@ def get_leaderboard_api(request):
             'leaderboard': leaderboard_data
         })
     
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_card_questions_api(request, card_id):
+    """
+    Get questions associated with a specific card
+    GET /api/cards/{card_id}/questions/
+    """
+    try:
+        # Validate card format
+        valid_cards = [choice[0] for choice in Question.CARD_CHOICES]
+        if card_id not in valid_cards:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid card. Valid cards are: {", ".join(valid_cards)}'
+            }, status=400)
+        
+        # Get questions for the specified card
+        questions = Question.objects.filter(card=card_id)
+        
+        if not questions.exists():
+            return JsonResponse({
+                'success': False,
+                'error': f'No questions found for card {card_id}'
+            }, status=404)
+        
+        # Convert to JSON format
+        questions_data = []
+        for question in questions:
+            question_data = {
+                'id': question.id,
+                'question_text': question.question_text,
+                'question_type': question.question_type,
+                'options': question.options,
+                'correct_answer': question.correct_answer,
+                'explanation': question.explanation,
+                'points': question.points,
+                'difficulty': question.difficulty,
+                'card': question.card,
+                'card_info': question.get_card_info(),
+                'created_at': question.created_at.isoformat()
+            }
+            questions_data.append(question_data)
+        
+        # Get card info
+        card_info = Question(card=card_id).get_card_info()
+        
+        return JsonResponse({
+            'success': True,
+            'card': card_id,
+            'card_info': card_info,
+            'count': len(questions_data),
+            'questions': questions_data
+        })
+    
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def award_points_api(request):
+    """
+    Award points to a player after UI validates correct answer
+    POST payload: {
+        "match_id": "uuid-string",
+        "username": "player1",
+        "question_id": 123,
+        "answer": "correct_answer",
+        "points": 1
+    }
+    """
+    try:
+        data = json.loads(request.body)
+        match_id = data.get('match_id')
+        username = data.get('username')
+        question_id = data.get('question_id')
+        answer = data.get('answer')
+        points = data.get('points')
+        
+        if not all([match_id, username, question_id, answer, points]):
+            return JsonResponse({
+                'success': False,
+                'error': 'match_id, username, question_id, answer, and points are required'
+            }, status=400)
+        
+        try:
+            game = Game.objects.get(match_id=match_id, status='completed')
+            participant = game.participants.get(player__username=username, is_winner=False)
+            question = Question.objects.get(id=question_id)
+            
+            # Verify the answer is actually correct (security check)
+            if answer.strip() != question.correct_answer.strip():
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Answer is not correct'
+                }, status=400)
+            
+            # Check if response already exists, if not create one
+            response, created = GameResponse.objects.get_or_create(
+                game=game,
+                participant=participant,
+                response_type='question',
+                defaults={
+                    'question': question,
+                    'player_answer': answer,
+                    'is_correct': True
+                }
+            )
+            
+            if not created:
+                # Update existing response
+                response.player_answer = answer
+                response.is_correct = True
+                response.save()
+            
+            # Update participant
+            participant.question_answered = True
+            participant.answer_correct = True
+            participant.save()
+            
+            # Update player's question answering statistics
+            with transaction.atomic():
+                current_correct = participant.player.correct_answers
+                current_total = participant.player.questions_answered
+                
+                participant.player.questions_answered = current_total + 1
+                participant.player.correct_answers = current_correct + 1
+                participant.player.save()
+            
+            return JsonResponse({
+                'success': True,
+                'result': {
+                    'points_awarded': points,
+                    'player': {
+                        'username': username,
+                        'total_correct_answers': participant.player.correct_answers,
+                        'total_questions_answered': participant.player.questions_answered,
+                        'answer_accuracy': round((participant.player.correct_answers / participant.player.questions_answered) * 100, 2) if participant.player.questions_answered > 0 else 0
+                    },
+                    'question': {
+                        'id': question.id,
+                        'points': points,
+                        'explanation': question.explanation
+                    }
+                }
+            })
+            
+        except (Game.DoesNotExist, GameParticipant.DoesNotExist, Question.DoesNotExist) as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'Game, participant, or question not found: {str(e)}'
+            }, status=404)
+    
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def record_wrong_answer_api(request):
+    """
+    Record a wrong answer (no points awarded)
+    POST payload: {
+        "match_id": "uuid-string",
+        "username": "player1",
+        "question_id": 123,
+        "answer": "wrong_answer"
+    }
+    """
+    try:
+        data = json.loads(request.body)
+        match_id = data.get('match_id')
+        username = data.get('username')
+        question_id = data.get('question_id')
+        answer = data.get('answer')
+        
+        if not all([match_id, username, question_id, answer]):
+            return JsonResponse({
+                'success': False,
+                'error': 'match_id, username, question_id, and answer are required'
+            }, status=400)
+        
+        try:
+            game = Game.objects.get(match_id=match_id, status='completed')
+            participant = game.participants.get(player__username=username, is_winner=False)
+            question = Question.objects.get(id=question_id)
+            
+            # Check if response already exists, if not create one
+            response, created = GameResponse.objects.get_or_create(
+                game=game,
+                participant=participant,
+                response_type='question',
+                defaults={
+                    'question': question,
+                    'player_answer': answer,
+                    'is_correct': False
+                }
+            )
+            
+            if not created:
+                # Update existing response
+                response.player_answer = answer
+                response.is_correct = False
+                response.save()
+            
+            # Update participant
+            participant.question_answered = True
+            participant.answer_correct = False
+            participant.save()
+            
+            # Update player's question answering statistics
+            with transaction.atomic():
+                current_total = participant.player.questions_answered
+                participant.player.questions_answered = current_total + 1
+                participant.player.save()
+            
+            return JsonResponse({
+                'success': True,
+                'result': {
+                    'points_awarded': 0,
+                    'correct_answer': question.correct_answer,
+                    'explanation': question.explanation,
+                    'player': {
+                        'username': username,
+                        'total_correct_answers': participant.player.correct_answers,
+                        'total_questions_answered': participant.player.questions_answered,
+                        'answer_accuracy': round((participant.player.correct_answers / participant.player.questions_answered) * 100, 2) if participant.player.questions_answered > 0 else 0
+                    }
+                }
+            })
+            
+        except (Game.DoesNotExist, GameParticipant.DoesNotExist, Question.DoesNotExist) as e:
+            return JsonResponse({
+                'success': False,
+                'error': f'Game, participant, or question not found: {str(e)}'
+            }, status=404)
+    
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def submit_completed_game_api(request):
+    """
+    Submit a completed game from UI with full game data
+    POST payload: {
+        "match_id": "uuid-string",
+        "game_data": {
+            "participant_count": 2,
+            "winning_team": 1,
+            "cards_chosen": ["S3", "HJ"],
+            "game_duration": 300,  # seconds
+            "created_at": "2025-08-23T10:00:00Z",
+            "completed_at": "2025-08-23T10:05:00Z"
+        },
+        "players": [
+            {
+                "player_id": 1,  # Required for sync
+                "username": "alice",
+                "player_name": "Alice",
+                "team": 1,
+                "marks_earned": 1,
+                "is_winner": true,
+                "lost_card": null,
+                "question_answered": false,
+                "answer_correct": false
+            },
+            {
+                "player_id": 2,  # Required for sync
+                "username": "bob", 
+                "player_name": "Bob",
+                "team": 2,
+                "marks_earned": 0,
+                "is_winner": false,
+                "lost_card": "S3",
+                "question_answered": false,
+                "answer_correct": false
+            }
+        ],
+        "responses": [
+            {
+                "player_id": 1,
+                "response_type": "fun_fact",
+                "fun_fact_text": "Did you know that spades represent challenges?",
+                "card": "S3"
+            },
+            {
+                "player_id": 2,
+                "response_type": "question",
+                "question_id": 123,
+                "card": "S3"
+            }
+        ]
+    }
+    """
+    try:
+        data = json.loads(request.body)
+        match_id = data.get('match_id')
+        game_data = data.get('game_data', {})
+        players_data = data.get('players', [])
+        responses_data = data.get('responses', [])
+        
+        # Validate required fields
+        if not match_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'match_id is required'
+            }, status=400)
+            
+        if not game_data or not players_data:
+            return JsonResponse({
+                'success': False,
+                'error': 'game_data and players are required'
+            }, status=400)
+            
+        required_game_fields = ['participant_count', 'winning_team', 'cards_chosen']
+        missing_game_fields = [field for field in required_game_fields if field not in game_data]
+        if missing_game_fields:
+            return JsonResponse({
+                'success': False,
+                'error': f'Missing game_data fields: {", ".join(missing_game_fields)}'
+            }, status=400)
+            
+        # Validate player data
+        for player_data in players_data:
+            required_player_fields = ['player_id', 'username', 'team', 'is_winner']
+            missing_player_fields = [field for field in required_player_fields if field not in player_data]
+            if missing_player_fields:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Missing player fields: {", ".join(missing_player_fields)} for player data'
+                }, status=400)
+        
+        # Validate cards if provided
+        cards_chosen = game_data.get('cards_chosen', [])
+        if cards_chosen:
+            valid_cards = [choice[0] for choice in Question.CARD_CHOICES]
+            invalid_cards = [card for card in cards_chosen if card not in valid_cards]
+            if invalid_cards:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Invalid cards: {", ".join(invalid_cards)}. Valid cards are: {", ".join(valid_cards)}'
+                }, status=400)
+        
+        with transaction.atomic():
+            # Check if game already exists
+            try:
+                existing_game = Game.objects.get(match_id=match_id)
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Game with match_id {match_id} already exists'
+                }, status=400)
+            except Game.DoesNotExist:
+                pass  # Good, game doesn't exist yet
+            
+            # Create the game
+            game = Game.objects.create(
+                match_id=match_id,
+                participant_count=game_data['participant_count'],
+                team_count=2 if game_data['participant_count'] > 1 else 1,
+                status='completed',
+                winning_team=game_data['winning_team'],
+                cards_chosen=cards_chosen,
+                created_at=timezone.now() if not game_data.get('created_at') else game_data['created_at'],
+                completed_at=timezone.now() if not game_data.get('completed_at') else game_data['completed_at']
+            )
+            
+            # Create/Update players and participants
+            participants = []
+            team1_marks = 0
+            team2_marks = 0
+            
+            for player_data in players_data:
+                # Get or create player using player_id for sync
+                try:
+                    player = Player.objects.get(id=player_data['player_id'])
+                    # Update player info if needed
+                    if player.username != player_data['username']:
+                        player.username = player_data['username']
+                    if player.player_name != player_data.get('player_name', player_data['username']):
+                        player.player_name = player_data.get('player_name', player_data['username'])
+                    player.save()
+                except Player.DoesNotExist:
+                    return JsonResponse({
+                        'success': False,
+                        'error': f'Player with ID {player_data["player_id"]} not found. Please create player first.'
+                    }, status=400)
+                
+                # Create game participant
+                participant = GameParticipant.objects.create(
+                    game=game,
+                    player=player,
+                    team=player_data['team'],
+                    is_winner=player_data['is_winner'],
+                    marks_earned=player_data.get('marks_earned', 1 if player_data['is_winner'] else 0),
+                    lost_card=player_data.get('lost_card'),
+                    question_answered=player_data.get('question_answered', False),
+                    answer_correct=player_data.get('answer_correct', False)
+                )
+                participants.append(participant)
+                
+                # Count marks for teams
+                if participant.team == 1:
+                    team1_marks += participant.marks_earned
+                else:
+                    team2_marks += participant.marks_earned
+                
+                # Update player's game statistics
+                player.update_game_stats(
+                    won=player_data['is_winner'],
+                    marks_earned=player_data.get('marks_earned', 1 if player_data['is_winner'] else 0),
+                    questions_answered=1 if player_data.get('question_answered', False) else 0,
+                    correct_answers=1 if player_data.get('answer_correct', False) else 0
+                )
+            
+            # Create game result
+            game_result = GameResult.objects.create(
+                game=game,
+                team1_marks=team1_marks,
+                team2_marks=team2_marks,
+                result_summary={
+                    'winning_team': game_data['winning_team'],
+                    'cards_chosen': cards_chosen,
+                    'completed_at': game.completed_at.isoformat() if game.completed_at else timezone.now().isoformat(),
+                    'game_duration': game_data.get('game_duration', 0)
+                }
+            )
+            
+            # Create game responses
+            for response_data in responses_data:
+                # Find the participant by player_id
+                participant = None
+                for p in participants:
+                    if p.player.id == response_data['player_id']:
+                        participant = p
+                        break
+                
+                if not participant:
+                    continue  # Skip if participant not found
+                
+                # Create response based on type
+                game_response = GameResponse.objects.create(
+                    game=game,
+                    participant=participant,
+                    response_type=response_data['response_type']
+                )
+                
+                if response_data['response_type'] == 'fun_fact':
+                    game_response.fun_fact_text = response_data.get('fun_fact_text', 'Congratulations!')
+                    game_response.save()
+                    
+                elif response_data['response_type'] == 'question':
+                    question_id = response_data.get('question_id')
+                    if question_id:
+                        try:
+                            question = Question.objects.get(id=question_id)
+                            game_response.question = question
+                            game_response.save()
+                            
+                            # Note: Question model doesn't have total_attempts field
+                            # Question usage tracking can be added later if needed
+                            
+                        except Question.DoesNotExist:
+                            pass  # Question not found, skip
+            
+            # Prepare response data
+            participants_data = []
+            for participant in participants:
+                participants_data.append({
+                    'player_id': participant.player.id,
+                    'username': participant.player.username,
+                    'player_name': participant.player.player_name,
+                    'team': participant.team,
+                    'is_winner': participant.is_winner,
+                    'marks_earned': participant.marks_earned,
+                    'lost_card': participant.lost_card,
+                    'question_answered': participant.question_answered,
+                    'answer_correct': participant.answer_correct
+                })
+            
+            return JsonResponse({
+                'success': True,
+                'game': {
+                    'match_id': str(game.match_id),
+                    'status': game.status,
+                    'participant_count': game.participant_count,
+                    'team_count': game.team_count,
+                    'winning_team': game.winning_team,
+                    'cards_chosen': game.cards_chosen,
+                    'created_at': game.created_at.isoformat() if game.created_at else None,
+                    'completed_at': game.completed_at.isoformat() if game.completed_at else None,
+                    'participants': participants_data,
+                    'result': {
+                        'team1_marks': team1_marks,
+                        'team2_marks': team2_marks,
+                        'result_summary': game_result.result_summary
+                    }
+                },
+                'sync_status': {
+                    'players_updated': len(players_data),
+                    'participants_created': len(participants),
+                    'responses_created': len(responses_data),
+                    'questions_linked': len([r for r in responses_data if r.get('question_id')])
+                }
+            })
+            
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+# ==================== GAME CONTENT API ENDPOINTS ====================
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_game_content_api(request):
+    """
+    API endpoint to get game content with filtering options
+    GET /api/game-content/?language=english&age_group=15-19&topic=history
+    """
+    try:
+        # Get query parameters
+        language = request.GET.get('language')
+        age_group = request.GET.get('age_group')
+        topic = request.GET.get('topic')
+        subtopic = request.GET.get('subtopic')
+        content_type = request.GET.get('content_type')
+        status = request.GET.get('status', 'published')  # Default to published
+        
+        # Start with published content only (unless specified otherwise)
+        content_queryset = GameContent.objects.filter(status=status)
+        
+        # Apply filters
+        if language:
+            content_queryset = content_queryset.filter(language=language)
+        if age_group:
+            content_queryset = content_queryset.filter(age_group=age_group)
+        if topic:
+            content_queryset = content_queryset.filter(topic__icontains=topic)
+        if subtopic:
+            content_queryset = content_queryset.filter(subtopic__icontains=subtopic)
+        if content_type:
+            content_queryset = content_queryset.filter(content_type=content_type)
+        
+        # Order by creation date (most recent first)
+        content_queryset = content_queryset.order_by('-created_at')
+        
+        # Convert to JSON format
+        content_data = []
+        for content in content_queryset:
+            content_data.append({
+                'id': content.id,
+                'title': content.title,
+                'language': content.language,
+                'age_group': content.age_group,
+                'topic': content.topic,
+                'subtopic': content.subtopic,
+                'all_subtopics': content.get_all_subtopics(),
+                'subtopics_count': content.get_subtopics_count(),
+                'hierarchy': content.get_hierarchy_display(),
+                'info': content.info,
+                'content_type': content.content_type,
+                'difficulty_level': content.difficulty_level,
+                'status': content.status,
+                'tags': content.get_tags_list(),
+                'card_association': content.card_association,
+                'view_count': content.view_count,
+                'usage_count': content.usage_count,
+                'created_at': content.created_at.isoformat(),
+                'updated_at': content.updated_at.isoformat(),
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'count': len(content_data),
+            'filters_applied': {
+                'language': language,
+                'age_group': age_group,
+                'topic': topic,
+                'subtopic': subtopic,
+                'content_type': content_type,
+                'status': status
+            },
+            'content': content_data
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_game_content_detail_api(request, content_id):
+    """
+    API endpoint to get detailed information about specific game content
+    GET /api/game-content/{content_id}/
+    """
+    try:
+        content = GameContent.objects.get(id=content_id)
+        
+        # Increment view count
+        content.increment_view_count()
+        
+        # Prepare detailed response
+        content_data = {
+            'id': content.id,
+            'title': content.title,
+            'language': content.language,
+            'age_group': content.age_group,
+            'topic': content.topic,
+            'subtopic': content.subtopic,
+            'all_subtopics': content.get_all_subtopics(),
+            'subtopics_count': content.get_subtopics_count(),
+            'hierarchy': content.get_hierarchy_display(),
+            'info': content.info,
+            'content_type': content.content_type,
+            'difficulty_level': content.difficulty_level,
+            'status': content.status,
+            'tags': content.get_tags_list(),
+            'card_association': content.card_association,
+            'view_count': content.view_count,
+            'usage_count': content.usage_count,
+            'created_at': content.created_at.isoformat(),
+            'updated_at': content.updated_at.isoformat(),
+            'published_at': content.published_at.isoformat() if content.published_at else None
+        }
+        
+        # Add creator information if available
+        if content.created_by:
+            content_data['created_by'] = {
+                'name': content.created_by.name,
+                'email': content.created_by.email
+            }
+        
+        # Add approver information if available
+        if content.approved_by:
+            content_data['approved_by'] = {
+                'name': content.approved_by.name,
+                'email': content.approved_by.email
+            }
+        
+        # Add related question if available
+        if content.related_question:
+            content_data['related_question'] = {
+                'id': content.related_question.id,
+                'question_text': content.related_question.question_text,
+                'card': content.related_question.card
+            }
+        
+        return JsonResponse({
+            'success': True,
+            'content': content_data
+        })
+        
+    except GameContent.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Game content not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_game_content_by_language_age_api(request, language, age_group):
+    """
+    API endpoint to get game content filtered by language and age group
+    GET /api/game-content/{language}/{age_group}/
+    """
+    try:
+        # Filter by language and age group
+        contents = GameContent.objects.filter(
+            language=language,
+            age_group=age_group,
+            status='published'
+        ).order_by('-created_at')
+        
+        # Apply additional filters
+        topic = request.GET.get('topic', '')
+        if topic:
+            contents = contents.filter(topic__icontains=topic)
+        
+        difficulty = request.GET.get('difficulty', '')
+        if difficulty:
+            contents = contents.filter(difficulty_level=difficulty)
+        
+        # Prepare response data
+        contents_data = []
+        for content in contents:
+            content_data = {
+                'id': content.id,
+                'title': content.title,
+                'language': content.language,
+                'age_group': content.age_group,
+                'topic': content.topic,
+                'subtopic': content.subtopic,
+                'info': content.info,
+                'content_type': content.content_type,
+                'difficulty_level': content.difficulty_level,
+                'status': content.status,
+                'tags': content.get_tags_list(),
+                'usage_count': content.usage_count,
+                'view_count': content.view_count,
+                'created_at': content.created_at.isoformat()
+            }
+            contents_data.append(content_data)
+        
+        return JsonResponse({
+            'success': True,
+            'count': len(contents_data),
+            'filters': {
+                'language': language,
+                'age_group': age_group,
+                'topic': topic,
+                'difficulty': difficulty
+            },
+            'contents': contents_data
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def create_game_content_api(request):
+    """
+    API endpoint to create new game content
+    POST /api/game-content/create/
+    """
+    try:
+        data = json.loads(request.body)
+        
+        # Required fields
+        required_fields = ['language', 'age_group', 'topic', 'subtopic', 'info']
+        for field in required_fields:
+            if not data.get(field):
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Required field missing: {field}'
+                }, status=400)
+        
+        # Validate choices
+        valid_languages = [choice[0] for choice in GameContent.LANGUAGE_CHOICES]
+        valid_age_groups = [choice[0] for choice in GameContent.AGE_GROUP_CHOICES]
+        valid_content_types = [choice[0] for choice in GameContent.CONTENT_TYPE_CHOICES]
+        
+        if data['language'] not in valid_languages:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid language. Valid options: {", ".join(valid_languages)}'
+            }, status=400)
+        
+        if data['age_group'] not in valid_age_groups:
+            return JsonResponse({
+                'success': False,
+                'error': f'Invalid age group. Valid options: {", ".join(valid_age_groups)}'
+            }, status=400)
+        
+        # Create new game content
+        content = GameContent.objects.create(
+            language=data['language'],
+            age_group=data['age_group'],
+            topic=data['topic'],
+            subtopic=data['subtopic'],
+            info=data['info'],
+            title=data.get('title', ''),
+            content_type=data.get('content_type', 'educational'),
+            difficulty_level=data.get('difficulty_level', 'beginner'),
+            status=data.get('status', 'draft'),
+            tags=data.get('tags', ''),
+            card_association=data.get('card_association', ''),
+            subtopics_data=data.get('subtopics_data', []),
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'content': {
+                'id': content.id,
+                'title': content.title,
+                'language': content.language,
+                'age_group': content.age_group,
+                'topic': content.topic,
+                'subtopic': content.subtopic,
+                'all_subtopics': content.get_all_subtopics(),
+                'subtopics_count': content.get_subtopics_count(),
+                'info': content.info,
+                'content_type': content.content_type,
+                'difficulty_level': content.difficulty_level,
+                'status': content.status,
+                'tags': content.tags,
+                'created_at': content.created_at.isoformat()
+            }
+        }, status=201)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON format'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["PUT"])
+def update_game_content_api(request, content_id):
+    """
+    API endpoint to update existing game content
+    PUT /api/game-content/<id>/update/
+    """
+    try:
+        content = GameContent.objects.get(id=content_id)
+        data = json.loads(request.body)
+        
+        # Validate language if provided
+        if 'language' in data:
+            valid_languages = [choice[0] for choice in GameContent.LANGUAGE_CHOICES]
+            if data['language'] not in valid_languages:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Invalid language. Valid options: {", ".join(valid_languages)}'
+                }, status=400)
+            content.language = data['language']
+        
+        # Validate choices
+        if 'age_group' in data:
+            valid_age_groups = [choice[0] for choice in GameContent.AGE_GROUP_CHOICES]
+            if data['age_group'] not in valid_age_groups:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Invalid age group. Valid options: {", ".join(valid_age_groups)}'
+                }, status=400)
+            content.age_group = data['age_group']
+        
+        if 'content_type' in data:
+            valid_content_types = [choice[0] for choice in GameContent.CONTENT_TYPE_CHOICES]
+            if data['content_type'] not in valid_content_types:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Invalid content type. Valid options: {", ".join(valid_content_types)}'
+                }, status=400)
+            content.content_type = data['content_type']
+        
+        # Update other fields
+        for field in ['title', 'topic', 'subtopic', 'info', 'difficulty_level', 'status', 'tags', 'card_association']:
+            if field in data:
+                setattr(content, field, data[field])
+        
+        # Handle subtopics_data update
+        if 'subtopics_data' in data:
+            content.subtopics_data = data['subtopics_data']
+        
+        content.save()
+        
+        return JsonResponse({
+            'success': True,
+            'content': {
+                'id': content.id,
+                'title': content.title,
+                'language': content.language,
+                'age_group': content.age_group,
+                'topic': content.topic,
+                'subtopic': content.subtopic,
+                'info': content.info,
+                'content_type': content.content_type,
+                'difficulty_level': content.difficulty_level,
+                'status': content.status,
+                'tags': content.tags,
+                'updated_at': content.updated_at.isoformat()
+            }
+        })
+        
+    except GameContent.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Game content not found'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON format'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["DELETE"])
+def delete_game_content_api(request, content_id):
+    """
+    API endpoint to delete game content
+    DELETE /api/game-content/<id>/delete/
+    """
+    try:
+        content = GameContent.objects.get(id=content_id)
+        content.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Game content deleted successfully'
+        })
+        
+    except GameContent.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Game content not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def increment_content_usage_api(request):
+    """
+    API endpoint to increment usage count for game content
+    POST /api/game-content/increment-usage/
+    """
+    try:
+        data = json.loads(request.body)
+        content_id = data.get('content_id')
+        
+        if not content_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'content_id is required'
+            }, status=400)
+        
+        content = GameContent.objects.get(id=content_id)
+        content.increment_usage_count()
+        
+        return JsonResponse({
+            'success': True,
+            'content': {
+                'id': content.id,
+                'title': content.title,
+                'usage_count': content.usage_count,
+                'view_count': content.view_count
+            }
+        })
+        
+    except GameContent.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Game content not found'
+        }, status=404)
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON format'
+        }, status=400)
     except Exception as e:
         return JsonResponse({
             'success': False,

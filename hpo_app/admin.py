@@ -4,9 +4,10 @@ from django.db import models
 from .models import (
     Organisation, Admin, Group, Player, Question, QuestionPackage, 
     OrganizationalPackage, PublicPackage, PackageAttempt,
-    Game, GameParticipant, GameResult, GameResponse
+    Game, GameParticipant, GameResult, GameResponse, 
+    Topic, Subtopic, GameContent
 )
-from .forms import QuestionAdminForm, PlayerAdminForm
+from .forms import QuestionAdminForm, PlayerAdminForm, GameContentAdminForm
 
 # Customize admin site headers and titles
 admin.site.site_header = "HPO Administration"
@@ -394,7 +395,7 @@ class GameAdmin(admin.ModelAdmin):
             'fields': ('match_id', 'participant_count', 'team_count', 'status')
         }),
         ('Game Results', {
-            'fields': ('winning_team', 'cards_in_play')
+            'fields': ('winning_team', 'cards_chosen')
         }),
         ('Timestamps', {
             'fields': ('created_at', 'completed_at')
@@ -542,3 +543,216 @@ class GameResponseAdmin(admin.ModelAdmin):
         updated = queryset.filter(response_type='question').update(is_correct=False)
         self.message_user(request, f'{updated} question responses marked as incorrect.')
     mark_incorrect.short_description = "Mark selected question responses as incorrect"
+
+
+@admin.register(Topic)
+class TopicAdmin(admin.ModelAdmin):
+    list_display = ['name', 'language', 'get_subtopics_count', 'get_content_count', 'is_active', 'created_at']
+    list_filter = ['language', 'is_active', 'created_at']
+    search_fields = ['name', 'description']
+    readonly_fields = ['created_at', 'updated_at', 'get_subtopics_count', 'get_content_count']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'language', 'description', 'is_active')
+        }),
+        ('Statistics', {
+            'fields': ('get_subtopics_count', 'get_content_count'),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_subtopics_count(self, obj):
+        return obj.get_subtopics_count()
+    get_subtopics_count.short_description = "Subtopics Count"
+    
+    def get_content_count(self, obj):
+        return obj.get_content_count()
+    get_content_count.short_description = "Total Content Count"
+
+
+class SubtopicInline(admin.TabularInline):
+    model = Subtopic
+    extra = 1
+    fields = ['name', 'description', 'order', 'is_active']
+    ordering = ['order', 'name']
+
+
+@admin.register(Subtopic)
+class SubtopicAdmin(admin.ModelAdmin):
+    list_display = ['name', 'topic', 'get_topic_language', 'get_content_count', 'order', 'is_active', 'created_at']
+    list_filter = ['topic__language', 'topic', 'is_active', 'created_at']
+    search_fields = ['name', 'description', 'topic__name']
+    readonly_fields = ['created_at', 'updated_at', 'get_content_count']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('topic', 'name', 'description', 'order', 'is_active')
+        }),
+        ('Statistics', {
+            'fields': ('get_content_count',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def get_topic_language(self, obj):
+        return obj.topic.language
+    get_topic_language.short_description = "Language"
+    
+    def get_content_count(self, obj):
+        return obj.get_content_count()
+    get_content_count.short_description = "Content Count"
+
+
+# Add inline to Topic admin
+TopicAdmin.inlines = [SubtopicInline]
+
+
+@admin.register(GameContent)
+class GameContentAdmin(admin.ModelAdmin):
+    form = GameContentAdminForm
+    
+    list_display = [
+        'topic', 
+        'subtopic', 
+        'language', 
+        'age_group', 
+        'content_type',
+        'get_subtopics_count',
+        'status', 
+        'view_count', 
+        'usage_count',
+        'created_at'
+    ]
+    
+    list_filter = [
+        'language',
+        'age_group', 
+        'content_type',
+        'difficulty_level',
+        'status',
+        'created_at'
+    ]
+    
+    search_fields = [
+        'topic',
+        'subtopic', 
+        'info',
+        'title',
+        'tags'
+    ]
+    
+    readonly_fields = [
+        'view_count', 
+        'usage_count', 
+        'created_at', 
+        'updated_at',
+        'get_all_subtopics_display'
+    ]
+    
+    fieldsets = (
+        ('Basic Information (Required)', {
+            'fields': (
+                'language',
+                'age_group', 
+                'topic',
+                'subtopic',
+                'info'
+            ),
+            'description': 'Fill in these required fields manually like in a handbook'
+        }),
+        ('Multiple Subtopics', {
+            'fields': (
+                'get_all_subtopics_display',
+                'additional_subtopics',
+            ),
+            'description': 'Add multiple subtopics with their own information. The main subtopic is shown above.',
+        }),
+        ('Additional Details', {
+            'fields': (
+                'title',
+                'content_type',
+                'difficulty_level',
+                'status',
+                'tags'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Associations', {
+            'fields': (
+                'related_question',
+                'card_association'
+            ),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': (
+                'created_by',
+                'approved_by',
+                'view_count',
+                'usage_count',
+                'created_at',
+                'updated_at'
+            ),
+            'classes': ('collapse',)
+        })
+    )
+    
+    def get_subtopics_count(self, obj):
+        """Display the total number of subtopics"""
+        return obj.get_subtopics_count()
+    get_subtopics_count.short_description = 'Subtopics Count'
+    
+    def get_all_subtopics_display(self, obj):
+        """Display all subtopics for read-only view"""
+        if not obj.pk:
+            return "Save the content first to add multiple subtopics"
+        
+        subtopics = obj.get_all_subtopics()
+        if not subtopics:
+            return "No subtopics added"
+        
+        html = "<div style='max-width: 600px;'>"
+        for i, subtopic_data in enumerate(subtopics):
+            primary_label = " (Primary)" if subtopic_data.get('is_primary') else ""
+            html += f"<div style='margin-bottom: 10px; padding: 10px; border: 1px solid #ddd; border-radius: 4px;'>"
+            html += f"<strong>{i+1}. {subtopic_data['subtopic']}{primary_label}</strong><br>"
+            html += f"<em>{subtopic_data['info'][:200]}{'...' if len(subtopic_data['info']) > 200 else ''}</em>"
+            html += "</div>"
+        html += "</div>"
+        return html
+    get_all_subtopics_display.short_description = 'All Subtopics'
+    get_all_subtopics_display.allow_tags = True
+    
+    class Media:
+        css = {
+            'all': ('admin/css/gamecontent_admin.css',)
+        }
+        js = ('admin/js/gamecontent_admin.js',)
+    
+    ordering = ['-created_at']
+    
+    actions = ['mark_as_published', 'mark_as_draft', 'mark_as_archived']
+    
+    def mark_as_published(self, request, queryset):
+        queryset.update(status='published')
+        self.message_user(request, f"{queryset.count()} content items marked as published.")
+    mark_as_published.short_description = "Mark selected content as Published"
+    
+    def mark_as_draft(self, request, queryset):
+        queryset.update(status='draft')
+        self.message_user(request, f"{queryset.count()} content items marked as draft.")
+    mark_as_draft.short_description = "Mark selected content as Draft"
+    
+    def mark_as_archived(self, request, queryset):
+        queryset.update(status='archived')
+        self.message_user(request, f"{queryset.count()} content items archived.")
+    mark_as_archived.short_description = "Archive selected content"

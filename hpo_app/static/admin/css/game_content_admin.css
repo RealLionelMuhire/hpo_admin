@@ -1,0 +1,141 @@
+/* Game Content Admin CSS */
+
+.field-subtopics_input {
+    margin-bottom: 20px;
+}
+
+.field-subtopics_input input {
+    width: 100%;
+    max-width: 600px;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.field-subtopics_input .help {
+    margin-top: 5px;
+    font-size: 12px;
+    color: #666;
+    background: #f8f9fa;
+    padding: 8px;
+    border-radius: 4px;
+    border-left: 4px solid #007cba;
+}
+
+.field-get_subtopics_display {
+    background: #f8f9fa;
+    padding: 10px;
+    border-radius: 4px;
+    border-left: 4px solid #28a745;
+}
+
+.field-get_subtopics_display .readonly {
+    font-weight: bold;
+    color: #333;
+}
+
+/* Subtopics display in list view */
+.admin-game-content .field-get_subtopics_display {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Form improvements */
+.game-content-form .form-row {
+    margin-bottom: 15px;
+}
+
+.game-content-form .wide {
+    width: 100%;
+}
+
+.game-content-form textarea {
+    font-family: 'Monaco', 'Consolas', monospace;
+    line-height: 1.4;
+}
+
+/* Status badges */
+.status-published {
+    background: #28a745;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.status-draft {
+    background: #6c757d;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.status-review {
+    background: #ffc107;
+    color: #212529;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.status-approved {
+    background: #17a2b8;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+.status-archived {
+    background: #dc3545;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+}
+
+/* Language badges */
+.language-english {
+    background: #007cba;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.language-kinyarwanda {
+    background: #28a745;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.language-french {
+    background: #6f42c1;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: bold;
+}
+
+.language-swahili {
+    background: #fd7e14;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: bold;
+}

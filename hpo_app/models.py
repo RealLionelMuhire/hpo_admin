@@ -761,8 +761,8 @@ class Game(models.Model):
     # Winning team (1 or 2, null if game not finished)
     winning_team = models.IntegerField(blank=True, null=True, choices=[(1, 'Team 1'), (2, 'Team 2')])
     
-    # Cards used in this game (for tracking which questions might be needed)
-    cards_in_play = models.JSONField(default=list, blank=True, help_text="List of card IDs used in this game")
+    # Cards chosen by losing team (for questions and fun facts)
+    cards_chosen = models.JSONField(default=list, blank=True, help_text="List of card IDs chosen by losing players")
     
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(blank=True, null=True)
@@ -887,3 +887,362 @@ class GameResponse(models.Model):
     class Meta:
         verbose_name = 'Game Response'
         verbose_name_plural = 'Game Responses'
+
+
+class Topic(models.Model):
+    """Topic model for organizing content hierarchically"""
+    name = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Name of the topic (e.g., 'History', 'Science', 'Culture')"
+    )
+    
+    description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Brief description of the topic"
+    )
+    
+    # Language choices
+    LANGUAGE_CHOICES = [
+        ('english', 'English'),
+        ('kinyarwanda', 'Kinyarwanda'),
+        ('french', 'French'),
+        ('swahili', 'Swahili'),
+    ]
+    
+    language = models.CharField(
+        max_length=20,
+        choices=LANGUAGE_CHOICES,
+        default='english',
+        help_text="Language of the topic"
+    )
+    
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this topic is active and can be used"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.language})"
+    
+    def get_subtopics_count(self):
+        """Get count of subtopics under this topic"""
+        return self.subtopics.count()
+    
+    def get_content_count(self):
+        """Get total count of content under this topic"""
+        return GameContent.objects.filter(subtopic__topic=self).count()
+    
+    class Meta:
+        verbose_name = 'Topic'
+        verbose_name_plural = 'Topics'
+        ordering = ['language', 'name']
+        unique_together = ['name', 'language']
+
+
+class Subtopic(models.Model):
+    """Subtopic model that belongs to a topic"""
+    topic = models.ForeignKey(
+        Topic,
+        on_delete=models.CASCADE,
+        related_name='subtopics',
+        help_text="The parent topic this subtopic belongs to"
+    )
+    
+    name = models.CharField(
+        max_length=255,
+        help_text="Name of the subtopic (e.g., 'Ancient History', 'Independence Era')"
+    )
+    
+    description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Brief description of the subtopic"
+    )
+    
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this subtopic is active and can be used"
+    )
+    
+    # Ordering within the topic
+    order = models.PositiveIntegerField(
+        default=0,
+        help_text="Order of this subtopic within its parent topic"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.topic.name} → {self.name}"
+    
+    def get_content_count(self):
+        """Get count of content under this subtopic"""
+        return self.content.count()
+    
+    class Meta:
+        verbose_name = 'Subtopic'
+        verbose_name_plural = 'Subtopics'
+        ordering = ['topic__name', 'order', 'name']
+        unique_together = ['topic', 'name']
+
+
+class GameContent(models.Model):
+    """Game Content model for managing educational content with manual user input"""
+    
+    # Language choices - user must select one
+    LANGUAGE_CHOICES = [
+        ('english', 'English'),
+        ('kinyarwanda', 'Kinyarwanda'),
+        ('french', 'French'),
+        ('swahili', 'Swahili'),
+    ]
+    
+    # Age group choices - user must select one
+    AGE_GROUP_CHOICES = [
+        ('10-14', '10-14 years'),
+        ('15-19', '15-19 years'),
+        ('20-24', '20-24 years'),
+        ('25+', '25+ years'),
+    ]
+    
+    # Content type choices
+    CONTENT_TYPE_CHOICES = [
+        ('educational', 'Educational'),
+        ('fun_fact', 'Fun Fact'),
+        ('trivia', 'Trivia'),
+        ('cultural', 'Cultural'),
+        ('historical', 'Historical'),
+        ('scientific', 'Scientific'),
+        ('general', 'General Knowledge'),
+    ]
+    
+    # Status choices
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('review', 'Under Review'),
+        ('approved', 'Approved'),
+        ('published', 'Published'),
+        ('archived', 'Archived'),
+    ]
+    
+    # Manual input fields - user fills these manually like in a handbook
+    language = models.CharField(
+        max_length=20,
+        choices=LANGUAGE_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Choose the language: English, Kinyarwanda, French, or Swahili"
+    )
+    
+    age_group = models.CharField(
+        max_length=10,
+        choices=AGE_GROUP_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Select target age group: 10-14, 15-19, 20-24, or 25+"
+    )
+    
+    topic = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Enter the main topic (like a title) - e.g., 'History', 'Science', 'Culture'"
+    )
+    
+    subtopic = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Enter the main subtopic (like a subtitle) - e.g., 'Independence Era', 'Ancient History'"
+    )
+    
+    # Multiple subtopics with their information
+    subtopics_data = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Additional subtopics with their information. Format: [{'subtopic': 'Name', 'info': 'Content'}]"
+    )
+    
+    info = models.TextField(
+        help_text="Enter the main content information or educational material for the primary subtopic"
+    )
+    
+    # Additional useful fields
+    title = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Optional title or heading for the content"
+    )
+    
+    content_type = models.CharField(
+        max_length=20,
+        choices=CONTENT_TYPE_CHOICES,
+        default='educational',
+        help_text="Type of content"
+    )
+    
+    difficulty_level = models.CharField(
+        max_length=20,
+        choices=[
+            ('beginner', 'Beginner'),
+            ('intermediate', 'Intermediate'),
+            ('advanced', 'Advanced'),
+        ],
+        default='beginner',
+        help_text="Difficulty level of the content"
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='draft',
+        help_text="Publication status of the content"
+    )
+    
+    tags = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Comma-separated tags for categorization (e.g., 'history, rwanda, culture')"
+    )
+    
+    # Metadata fields
+    created_by = models.ForeignKey(
+        Admin,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_game_content',
+        help_text="Admin who created this content"
+    )
+    
+    approved_by = models.ForeignKey(
+        Admin,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_game_content',
+        help_text="Admin who approved this content"
+    )
+    
+    # Optional: Link to specific questions or cards
+    related_question = models.ForeignKey(
+        Question,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='game_content',
+        help_text="Optional: Link to a related question"
+    )
+    
+    card_association = models.CharField(
+        max_length=10,
+        blank=True,
+        null=True,
+        help_text="Optional: Associate with specific card (e.g., 'S3', 'HJ')"
+    )
+    
+    # Usage tracking
+    view_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of times this content has been viewed"
+    )
+    
+    usage_count = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of times this content has been used in games"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.topic} → {self.subtopic} ({self.language} - {self.age_group})"
+    
+    def get_hierarchy_display(self):
+        """Return the full hierarchy as a string"""
+        return f"{self.topic} → {self.subtopic}"
+    
+    def get_all_subtopics(self):
+        """Return all subtopics including the main one and additional ones"""
+        subtopics = []
+        
+        # Add main subtopic
+        if self.subtopic:
+            subtopics.append({
+                'subtopic': self.subtopic,
+                'info': self.info or '',
+                'is_primary': True
+            })
+        
+        # Add additional subtopics
+        if self.subtopics_data:
+            for subtopic_data in self.subtopics_data:
+                if isinstance(subtopic_data, dict) and 'subtopic' in subtopic_data:
+                    subtopics.append({
+                        'subtopic': subtopic_data.get('subtopic', ''),
+                        'info': subtopic_data.get('info', ''),
+                        'is_primary': False
+                    })
+        
+        return subtopics
+    
+    def add_subtopic(self, subtopic_name, subtopic_info):
+        """Add a new subtopic with its information"""
+        if not self.subtopics_data:
+            self.subtopics_data = []
+        
+        self.subtopics_data.append({
+            'subtopic': subtopic_name,
+            'info': subtopic_info
+        })
+        self.save()
+    
+    def remove_subtopic(self, index):
+        """Remove a subtopic by index"""
+        if self.subtopics_data and 0 <= index < len(self.subtopics_data):
+            self.subtopics_data.pop(index)
+            self.save()
+    
+    def get_subtopics_count(self):
+        """Get total count of subtopics"""
+        count = 1 if self.subtopic else 0  # Main subtopic
+        count += len(self.subtopics_data) if self.subtopics_data else 0  # Additional subtopics
+        return count
+    
+    def get_tags_list(self):
+        """Return tags as a list"""
+        if self.tags:
+            return [tag.strip() for tag in self.tags.split(',')]
+        return []
+    
+    def increment_view_count(self):
+        """Increment view count"""
+        self.view_count += 1
+        self.save(update_fields=['view_count'])
+    
+    def increment_usage_count(self):
+        """Increment usage count"""
+        self.usage_count += 1
+        self.save(update_fields=['usage_count'])
+    
+    class Meta:
+        verbose_name = 'Game Content'
+        verbose_name_plural = 'Game Content'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['language', 'age_group']),
+            models.Index(fields=['topic']),
+            models.Index(fields=['status']),
+            models.Index(fields=['content_type']),
+            models.Index(fields=['created_at']),
+        ]

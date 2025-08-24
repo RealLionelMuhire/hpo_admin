@@ -1,6 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from .models import Question, Player
+from .models import Question, Player, GameContent
 
 
 class PlayerAdminForm(forms.ModelForm):
@@ -176,4 +176,112 @@ class QuestionAdminForm(forms.ModelForm):
         js = ('admin/js/question_form.js',)
         css = {
             'all': ('admin/css/question_form.css',)
+        }
+
+
+class SubtopicInlineForm(forms.Form):
+    """Form for individual subtopic entries"""
+    subtopic = forms.CharField(
+        max_length=255,
+        widget=forms.TextInput(attrs={
+            'placeholder': 'Enter subtopic name',
+            'class': 'form-control'
+        })
+    )
+    info = forms.CharField(
+        widget=forms.Textarea(attrs={
+            'placeholder': 'Enter subtopic information',
+            'class': 'form-control',
+            'rows': 3
+        })
+    )
+
+
+class GameContentAdminForm(forms.ModelForm):
+    """Custom form for GameContent admin with multiple subtopics support"""
+    
+    # Fields for additional subtopics (we'll handle these with JavaScript)
+    additional_subtopics = forms.CharField(
+        widget=forms.HiddenInput(),
+        required=False,
+        help_text="JSON data for additional subtopics"
+    )
+    
+    class Meta:
+        model = GameContent
+        fields = '__all__'
+        widgets = {
+            'language': forms.Select(attrs={'class': 'form-control'}),
+            'age_group': forms.Select(attrs={'class': 'form-control'}),
+            'topic': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter main topic (e.g., History, Science, Culture)'
+            }),
+            'subtopic': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter main subtopic (e.g., Independence Era, Ancient History)'
+            }),
+            'info': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 4,
+                'placeholder': 'Enter main content information'
+            }),
+            'title': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Optional title for the content'
+            }),
+            'tags': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter comma-separated tags'
+            }),
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # If we have an existing instance, populate the additional_subtopics field
+        if self.instance and self.instance.pk and self.instance.subtopics_data:
+            import json
+            self.fields['additional_subtopics'].initial = json.dumps(self.instance.subtopics_data)
+    
+    def clean_additional_subtopics(self):
+        """Validate and parse the additional subtopics JSON data"""
+        import json
+        data = self.cleaned_data.get('additional_subtopics', '')
+        if not data:
+            return []
+        
+        try:
+            parsed_data = json.loads(data)
+            if not isinstance(parsed_data, list):
+                raise forms.ValidationError("Additional subtopics must be a list")
+            
+            # Validate each subtopic entry
+            for item in parsed_data:
+                if not isinstance(item, dict):
+                    raise forms.ValidationError("Each subtopic must be an object")
+                if 'subtopic' not in item or 'info' not in item:
+                    raise forms.ValidationError("Each subtopic must have 'subtopic' and 'info' fields")
+            
+            return parsed_data
+        except json.JSONDecodeError:
+            raise forms.ValidationError("Invalid JSON format for additional subtopics")
+    
+    def save(self, commit=True):
+        """Save the form and update subtopics_data"""
+        instance = super().save(commit=False)
+        
+        # Update subtopics_data with the additional subtopics
+        additional_subtopics = self.cleaned_data.get('additional_subtopics', [])
+        instance.subtopics_data = additional_subtopics
+        
+        if commit:
+            instance.save()
+        
+        return instance
+    
+    class Media:
+        js = ('admin/js/gamecontent_admin.js',)
+        css = {
+            'all': ('admin/css/gamecontent_admin.css',)
         }
