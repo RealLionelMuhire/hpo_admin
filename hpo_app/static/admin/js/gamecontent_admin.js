@@ -2,13 +2,6 @@
     'use strict';
     
     let subtopicsData = [];
-    let subtopicCounter = 0;
-    
-(function($) {
-    'use strict';
-    
-    let subtopicsData = [];
-    let subtopicCounter = 0;
     
     $(document).ready(function() {
         // Wait a bit for the admin interface to fully load
@@ -31,6 +24,8 @@
             return;
         }
         
+        console.log('Initializing subtopics interface...');
+        
         // Create the subtopics interface container
         const $container = $('<div class="subtopics-wrapper">');
         const $header = $('<h3 style="color: #333; margin-bottom: 15px;">Additional Subtopics</h3>');
@@ -46,21 +41,17 @@
         // Find the best place to insert the interface
         const $additionalSubtopicsField = $('.field-additional_subtopics');
         if ($additionalSubtopicsField.length > 0) {
-            // Insert before the hidden field
+            // Insert before the hidden field and hide it
             $additionalSubtopicsField.before($container);
-            // Hide the actual field since we're replacing it with our interface
             $additionalSubtopicsField.hide();
         } else {
-            // Fallback: insert after the Multiple Subtopics fieldset
-            const $multipleSubtopicsFieldset = $('fieldset:contains("Multiple Subtopics")');
-            if ($multipleSubtopicsFieldset.length > 0) {
-                $multipleSubtopicsFieldset.append($container);
+            // Fallback: insert after the info field
+            const $infoField = $('.field-info');
+            if ($infoField.length > 0) {
+                $infoField.after($container);
             } else {
-                // Last resort: insert after the info field
-                const $infoField = $('.field-info');
-                if ($infoField.length > 0) {
-                    $infoField.after($container);
-                }
+                // Last resort: append to the form
+                $('form').append($container);
             }
         }
         
@@ -74,7 +65,7 @@
             updateHiddenField();
         });
         
-        console.log('Subtopics interface initialized');
+        console.log('Subtopics interface initialized successfully');
     }
     
     function loadExistingSubtopics() {
@@ -82,6 +73,7 @@
         if (hiddenFieldValue) {
             try {
                 subtopicsData = JSON.parse(hiddenFieldValue);
+                console.log('Loaded existing subtopics:', subtopicsData);
                 renderSubtopics();
             } catch (e) {
                 console.error('Error parsing existing subtopics data:', e);
@@ -91,6 +83,7 @@
     }
     
     function addSubtopic() {
+        console.log('Adding new subtopic...');
         const newSubtopic = {
             subtopic: '',
             info: ''
@@ -98,15 +91,18 @@
         
         subtopicsData.push(newSubtopic);
         renderSubtopics();
+        updateHiddenField();
         
         // Focus on the new subtopic name field
         setTimeout(function() {
-            $(`#subtopic-name-${subtopicsData.length - 1}`).focus();
+            const newIndex = subtopicsData.length - 1;
+            $(`#subtopic-name-${newIndex}`).focus();
         }, 100);
     }
     
     function removeSubtopic(e) {
         const index = parseInt($(e.target).data('index'));
+        console.log('Removing subtopic at index:', index);
         subtopicsData.splice(index, 1);
         renderSubtopics();
         updateHiddenField();
@@ -153,6 +149,8 @@
             
             $container.append($subtopicDiv);
         });
+        
+        console.log('Rendered', subtopicsData.length, 'subtopics');
     }
     
     function updateSubtopicsData(e) {
@@ -174,6 +172,7 @@
         });
         
         $('#id_additional_subtopics').val(JSON.stringify(validSubtopics));
+        console.log('Updated hidden field with:', validSubtopics);
     }
     
 })(django.jQuery);

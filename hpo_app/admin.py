@@ -713,6 +713,8 @@ class GameContentAdmin(admin.ModelAdmin):
     
     def get_all_subtopics_display(self, obj):
         """Display all subtopics for read-only view"""
+        from django.utils.safestring import mark_safe
+        
         if not obj.pk:
             return "Save the content first to add multiple subtopics"
         
@@ -728,9 +730,8 @@ class GameContentAdmin(admin.ModelAdmin):
             html += f"<em>{subtopic_data['info'][:200]}{'...' if len(subtopic_data['info']) > 200 else ''}</em>"
             html += "</div>"
         html += "</div>"
-        return html
+        return mark_safe(html)
     get_all_subtopics_display.short_description = 'All Subtopics'
-    get_all_subtopics_display.allow_tags = True
     
     class Media:
         css = {
