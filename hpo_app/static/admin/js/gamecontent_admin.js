@@ -1,26 +1,36 @@
 (function($) {
     'use strict';
     
+    console.log('GameContent Admin JS loading...');
+    
     let subtopicsData = [];
     
     $(document).ready(function() {
+        console.log('DOM ready, starting initialization...');
         // Wait a bit for the admin interface to fully load
         setTimeout(function() {
+            console.log('Timeout reached, calling initializeSubtopicsInterface...');
             initializeSubtopicsInterface();
             loadExistingSubtopics();
         }, 500);
     });
     
     function initializeSubtopicsInterface() {
+        console.log('initializeSubtopicsInterface called');
         // Find the additional_subtopics field and create the interface
         const $hiddenField = $('#id_additional_subtopics');
+        console.log('Hidden field found:', $hiddenField.length > 0, $hiddenField);
+        
         if ($hiddenField.length === 0) {
             console.log('Hidden field #id_additional_subtopics not found');
+            // Let's see what fields are available
+            console.log('Available form fields:', $('input, textarea, select').map(function() { return this.id; }).get());
             return;
         }
         
         // Check if interface already exists
         if ($('.subtopics-wrapper').length > 0) {
+            console.log('Interface already exists');
             return;
         }
         

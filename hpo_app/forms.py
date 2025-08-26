@@ -281,7 +281,7 @@ class GameContentAdminForm(forms.ModelForm):
         return instance
     
     class Media:
-        js = ('admin/js/gamecontent_admin.js',)
+        js = ('admin/js/game_content_form.js',)
         css = {
             'all': ('admin/css/gamecontent_admin.css',)
         }
