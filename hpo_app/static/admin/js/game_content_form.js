@@ -45,20 +45,31 @@ function loadExistingSubtopics() {
 }
 
 function createSubtopicsInterface(hiddenField) {
-    // Create main container
+    // Create main container styled like Django admin fieldset
     const container = document.createElement('div');
-    container.className = 'subtopics-dynamic-interface';
+    container.className = 'subtopics-dynamic-interface module aligned';
     container.innerHTML = `
-        <div class="subtopics-header">
-            <h3 style="color: #333; margin-bottom: 15px;">Additional Subtopics</h3>
-            <p style="color: #666; margin-bottom: 15px;">
-                Add multiple subtopics with their own information. The main subtopic (above) is automatically included.
-            </p>
-        </div>
-        <div id="dynamic-subtopics-container"></div>
-        <button type="button" id="add-subtopic-btn" class="add-subtopic-btn">
-            + Add New Subtopic
-        </button>
+        <fieldset class="module aligned">
+            <h2>
+                <a href="#" class="collapse-toggle" id="subtopics-toggle">
+                    Additional Subtopics
+                    <span class="toggle-icon">Hide</span>
+                </a>
+            </h2>
+            <div class="fieldset-content" id="subtopics-content">
+                <div class="help">
+                    Add multiple subtopics with their own information. The main subtopic (above) is automatically included.
+                </div>
+                <div id="dynamic-subtopics-container"></div>
+                <div class="form-row">
+                    <div class="field-box">
+                        <button type="button" id="add-subtopic-btn" class="add-subtopic-btn default">
+                            Add New Subtopic
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </fieldset>
     `;
 
     // Find the best place to insert (after the info field or before the hidden field)
@@ -80,6 +91,24 @@ function createSubtopicsInterface(hiddenField) {
 
     // Setup event handlers
     document.getElementById('add-subtopic-btn').addEventListener('click', addSubtopic);
+    
+    // Setup collapse/expand functionality
+    const toggleButton = document.getElementById('subtopics-toggle');
+    const content = document.getElementById('subtopics-content');
+    const toggleIcon = toggleButton.querySelector('.toggle-icon');
+    
+    toggleButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            toggleIcon.textContent = 'Hide';
+            toggleButton.classList.remove('collapsed');
+        } else {
+            content.style.display = 'none';
+            toggleIcon.textContent = 'Show';
+            toggleButton.classList.add('collapsed');
+        }
+    });
     
     // Initial render
     renderSubtopics();
@@ -117,16 +146,7 @@ function renderSubtopics() {
 
     if (subtopicsData.length === 0) {
         container.innerHTML = `
-            <div class="no-subtopics" style="
-                padding: 20px; 
-                text-align: center; 
-                background: #f9f9f9; 
-                border: 1px dashed #ccc; 
-                border-radius: 4px; 
-                color: #666; 
-                font-style: italic;
-                margin-bottom: 15px;
-            ">
+            <div class="no-subtopics help">
                 No additional subtopics added yet. Click "Add New Subtopic" to add one.
             </div>
         `;
@@ -135,59 +155,43 @@ function renderSubtopics() {
 
     subtopicsData.forEach((subtopic, index) => {
         const subtopicDiv = document.createElement('div');
-        subtopicDiv.className = 'subtopic-container';
-        subtopicDiv.style.cssText = `
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 15px;
-            margin-bottom: 15px;
-            background-color: #f9f9f9;
-        `;
+        subtopicDiv.className = 'subtopic-container form-row';
         
         subtopicDiv.innerHTML = `
-            <div class="subtopic-header" style="
-                display: flex; 
-                justify-content: space-between; 
-                align-items: center; 
-                margin-bottom: 10px;
-            ">
-                <span style="font-weight: bold; color: #333;">
+            <fieldset class="module aligned subtopic-fieldset">
+                <h2>
                     Additional Subtopic ${index + 1}
-                </span>
-                <button type="button" class="remove-subtopic-btn" data-index="${index}" style="
-                    background-color: #dc3545;
-                    color: white;
-                    border: none;
-                    padding: 5px 10px;
-                    border-radius: 3px;
-                    cursor: pointer;
-                    font-size: 12px;
-                ">Remove</button>
-            </div>
-            <div class="subtopic-form-row" style="margin-bottom: 10px;">
-                <label style="display: block; margin-bottom: 5px; font-weight: bold;">
-                    Subtopic Name:
-                </label>
-                <input type="text" 
-                       id="subtopic-name-${index}"
-                       class="subtopic-input" 
-                       data-field="subtopic" 
-                       data-index="${index}"
-                       value="${subtopic.subtopic || ''}"
-                       placeholder="Enter subtopic name"
-                       style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 3px;">
-            </div>
-            <div class="subtopic-form-row">
-                <label style="display: block; margin-bottom: 5px; font-weight: bold;">
-                    Subtopic Information:
-                </label>
-                <textarea class="subtopic-input" 
-                          data-field="info" 
-                          data-index="${index}"
-                          rows="3"
-                          placeholder="Enter detailed information for this subtopic"
-                          style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 3px; resize: vertical;">${subtopic.info || ''}</textarea>
-            </div>
+                    <button type="button" class="remove-subtopic-btn" data-index="${index}">
+                        Remove
+                    </button>
+                </h2>
+                <div class="form-row field-subtopic-name">
+                    <div>
+                        <label class="required" for="subtopic-name-${index}">Subtopic Name:</label>
+                        <input type="text" 
+                               id="subtopic-name-${index}"
+                               class="subtopic-input vTextField" 
+                               data-field="subtopic" 
+                               data-index="${index}"
+                               value="${subtopic.subtopic || ''}"
+                               placeholder="Enter subtopic name"
+                               required="">
+                    </div>
+                </div>
+                <div class="form-row field-subtopic-info">
+                    <div>
+                        <label for="subtopic-info-${index}">Subtopic Information:</label>
+                        <textarea class="subtopic-input vLargeTextField" 
+                                  id="subtopic-info-${index}"
+                                  data-field="info" 
+                                  data-index="${index}"
+                                  rows="4"
+                                  cols="40"
+                                  placeholder="Enter detailed information for this subtopic">${subtopic.info || ''}</textarea>
+                        <div class="help">Enter detailed information for this subtopic</div>
+                    </div>
+                </div>
+            </fieldset>
         `;
         
         container.appendChild(subtopicDiv);
@@ -203,14 +207,6 @@ function setupSubtopicEventHandlers() {
         btn.addEventListener('click', function() {
             const index = parseInt(this.dataset.index);
             removeSubtopic(index);
-        });
-        
-        // Hover effect
-        btn.addEventListener('mouseenter', function() {
-            this.style.backgroundColor = '#c82333';
-        });
-        btn.addEventListener('mouseleave', function() {
-            this.style.backgroundColor = '#dc3545';
         });
     });
 
@@ -260,34 +256,152 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// CSS styles
+// CSS styles to match Django admin and respect themes
 const style = document.createElement('style');
 style.textContent = `
+    .subtopics-dynamic-interface {
+        margin-bottom: 20px;
+    }
+    
+    .subtopic-fieldset {
+        margin-bottom: 15px;
+        background: var(--body-bg, #f8f8f8);
+        border: 1px solid var(--border-color, #ddd);
+    }
+    
+    .subtopic-fieldset h2 {
+        background: var(--primary, #79aec8);
+        color: var(--primary-fg, white);
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 10px 15px;
+        margin: 0;
+        border-bottom: 1px solid var(--border-color, #ddd);
+        position: relative;
+    }
+    
     .add-subtopic-btn {
-        background-color: #28a745;
-        color: white;
+        background: var(--primary, #417690);
+        color: var(--primary-fg, white);
         border: none;
-        padding: 12px 24px;
+        padding: 10px 15px;
         border-radius: 4px;
         cursor: pointer;
-        margin-top: 15px;
-        margin-bottom: 15px;
-        font-size: 14px;
-        font-weight: bold;
-        transition: all 0.2s ease;
+        font-size: 13px;
+        font-weight: normal;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
     
     .add-subtopic-btn:hover {
-        background-color: #218838;
-        transform: translateY(-1px);
+        background: var(--primary-accent, #205067);
     }
     
-    .subtopics-dynamic-interface {
-        border: 1px solid #e1e1e1;
-        border-radius: 6px;
-        padding: 20px;
-        margin: 20px 0;
-        background-color: #fafafa;
+    .remove-subtopic-btn {
+        background: var(--delete-button-bg, #ba2121);
+        color: var(--button-fg, white);
+        border: none;
+        padding: 5px 10px;
+        border-radius: 3px;
+        cursor: pointer;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    
+    .remove-subtopic-btn:hover {
+        background: var(--delete-button-hover-bg, #a41515);
+    }
+    
+    .collapse-toggle {
+        color: var(--primary-fg, white) !important;
+        text-decoration: none !important;
+        display: block;
+        position: relative;
+    }
+    
+    .collapse-toggle:hover {
+        color: var(--primary-fg, #f0f0f0) !important;
+        opacity: 0.9;
+    }
+    
+    .toggle-icon {
+        font-size: 11px;
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-weight: normal;
+    }
+    
+    .collapse-toggle.collapsed .toggle-icon:before {
+        content: "▶ ";
+    }
+    
+    .no-subtopics {
+        padding: 15px;
+        color: var(--body-quiet-color, #666);
+        font-style: italic;
+        text-align: center;
+        background: var(--body-bg, #f8f8f8);
+        border: 1px dashed var(--border-color, #ddd);
+        margin-bottom: 15px;
+    }
+    
+    .subtopic-container .form-row {
+        margin: 0;
+    }
+    
+    .subtopic-container .form-row > div {
+        padding: 10px 15px;
+    }
+    
+    .subtopic-container label {
+        font-weight: bold;
+        color: var(--body-fg, #333);
+        display: block;
+        margin-bottom: 5px;
+    }
+    
+    .subtopic-container label.required:after {
+        content: " *";
+        color: var(--error-fg, #ba2121);
+    }
+    
+    .subtopic-container .help {
+        font-size: 11px;
+        color: var(--body-quiet-color, #666);
+        margin-top: 5px;
+    }
+    
+    /* Ensure inputs respect theme */
+    .subtopic-input {
+        background: var(--body-bg, white) !important;
+        color: var(--body-fg, #333) !important;
+        border: 1px solid var(--border-color, #ddd) !important;
+    }
+    
+    .subtopic-input:focus {
+        border-color: var(--primary, #79aec8) !important;
+        box-shadow: 0 0 0 2px var(--primary-accent, rgba(121, 174, 200, 0.2)) !important;
+    }
+    
+    /* Dark theme specific adjustments */
+    @media (prefers-color-scheme: dark) {
+        .subtopic-fieldset {
+            background: var(--darkened-bg, #2b2b2b);
+            border-color: var(--border-color, #464646);
+        }
+        
+        .no-subtopics {
+            background: var(--darkened-bg, #2b2b2b);
+            border-color: var(--border-color, #464646);
+        }
     }
 `;
 document.head.appendChild(style);
