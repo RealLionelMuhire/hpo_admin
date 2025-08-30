@@ -123,10 +123,10 @@ class Player(models.Model):
     phone = models.CharField(max_length=20, blank=True, null=True)
     
     AGE_GROUP_CHOICES = [
-        ('10-15', '10-15'),
-        ('16-21', '16-21'),
-        ('21-29', '21-29'),
-        ('above', 'Above 29'),
+        ('10-14', '10-14'),
+        ('15-19', '15-19'),
+        ('20-24', '20-24'),
+        ('25+', '25+'),
     ]
     age_group = models.CharField(
         max_length=10, 

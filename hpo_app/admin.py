@@ -137,9 +137,9 @@ class PlayerAdmin(admin.ModelAdmin):
     
     def bulk_edit_age_group(self, request, queryset):
         # This could be enhanced with a custom form
-        updated = queryset.update(age_group='21-29')
-        self.message_user(request, f'{updated} players age group updated to 21-29.')
-    bulk_edit_age_group.short_description = "Set age group to 21-29 for selected players"
+        updated = queryset.update(age_group='20-24')
+        self.message_user(request, f'{updated} players age group updated to 20-24.')
+    bulk_edit_age_group.short_description = "Set age group to 20-24 for selected players"
     
     fieldsets = (
         ('Basic Information', {

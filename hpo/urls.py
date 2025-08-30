@@ -22,4 +22,5 @@ urlpatterns = [
     path('', RedirectView.as_view(url='/admin/', permanent=False), name='home'),
     path('admin/', admin.site.urls),
     path('', include('hpo_app.urls')),
+    path('api/v1/', include('hpo_app.api_urls')),
 ]
