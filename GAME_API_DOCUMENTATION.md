@@ -59,22 +59,11 @@ POST /api/games/create/
 ```json
 {
     "participant_count": 2,
-    "players": [
-        {
-            "player_id": 1,
-            "username": "player1", 
-            "player_name": "Alice"
-        },
-        {
-            "player_id": 2,
-            "username": "player2", 
-            "player_name": "Bob"
-        }
-    ]
+    "players": [1, 2]
 }
 ```
 
-**Note**: `player_id` is **required** for proper database synchronization. Players must exist in the database before creating a game.
+**Note**: `players` is now an array of player IDs. Players must exist in the database before creating a game.
 
 **Valid participant counts:** 1, 2, 4, 6
 - 1 participant = Player vs Computer (1 team)
@@ -752,10 +741,7 @@ curl -X POST http://localhost:8000/api/games/create/ \
   -H "Content-Type: application/json" \
   -d '{
     "participant_count": 2,
-    "players": [
-      {"username": "alice", "player_name": "Alice"},
-      {"username": "bob", "player_name": "Bob"}
-    ]
+    "players": [1, 2]
   }'
 ```
 

@@ -268,16 +268,13 @@ def create_game_api(request):
     Create a new game session
     POST payload: {
         "participant_count": 2,  # 1, 2, 4, or 6
-        "players": [
-            {"username": "player1", "player_name": "Player One"},
-            {"username": "player2", "player_name": "Player Two"}
-        ]
+        "players": [1, 2]  # Array of player IDs
     }
     """
     try:
         data = json.loads(request.body)
         participant_count = data.get('participant_count')
-        players_data = data.get('players', [])
+        player_ids = data.get('players', [])
         
         # Validate participant count
         valid_counts = [1, 2, 4, 6]
@@ -287,19 +284,21 @@ def create_game_api(request):
                 'error': f'Invalid participant count. Must be one of: {valid_counts}'
             }, status=400)
         
-        # For single player game, no players array needed
-        if participant_count == 1:
-            if len(players_data) != 1:
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Single player game requires exactly 1 player'
-                }, status=400)
-        else:
-            if len(players_data) != participant_count:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Number of players ({len(players_data)}) must match participant count ({participant_count})'
-                }, status=400)
+        # Validate player IDs array
+        if len(player_ids) != participant_count:
+            return JsonResponse({
+                'success': False,
+                'error': f'Number of player IDs ({len(player_ids)}) must match participant count ({participant_count})'
+            }, status=400)
+        
+        # Validate all player IDs are integers
+        try:
+            player_ids = [int(pid) for pid in player_ids]
+        except (ValueError, TypeError):
+            return JsonResponse({
+                'success': False,
+                'error': 'All player IDs must be valid integers'
+            }, status=400)
         
         with transaction.atomic():
             # Create the game
@@ -308,25 +307,15 @@ def create_game_api(request):
                 status='waiting'
             )
             
-            # Create or get players and add them to the game
-            for i, player_data in enumerate(players_data):
-                username = player_data.get('username')
-                player_name = player_data.get('player_name', username)
-                
-                if not username:
+            # Add players to the game using their IDs
+            for i, player_id in enumerate(player_ids):
+                try:
+                    player = Player.objects.get(id=player_id)
+                except Player.DoesNotExist:
                     return JsonResponse({
                         'success': False,
-                        'error': 'Username is required for each player'
+                        'error': f'Player with ID {player_id} not found'
                     }, status=400)
-                
-                # Get or create player (for unauthenticated system)
-                player, created = Player.objects.get_or_create(
-                    username=username,
-                    defaults={
-                        'player_name': player_name,
-                        'password': 'temp123'  # Temporary password for unauthenticated players
-                    }
-                )
                 
                 # Assign team (for 1 player game, always team 1)
                 if participant_count == 1:
@@ -355,6 +344,7 @@ def create_game_api(request):
                     'status': game.status,
                     'participants': [
                         {
+                            'player_id': p.player.id,
                             'username': p.player.username,
                             'player_name': p.player.player_name,
                             'team': p.team
