@@ -87,9 +87,9 @@ class PlayerSerializer(serializers.ModelSerializer):
             'id', 'player_name', 'username', 'email', 'phone',
             'age_group', 'gender', 'province', 'district',
             'points', 'games_played', 'games_won', 'win_rate',
-            'created_at'
+            'last_login', 'created_at'
         ]
-        read_only_fields = ['id', 'points', 'games_played', 'games_won', 'win_rate', 'created_at']
+        read_only_fields = ['id', 'points', 'games_played', 'games_won', 'win_rate', 'last_login', 'created_at']
 
 
 class PlayerLoginSerializer(serializers.Serializer):

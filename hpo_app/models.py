@@ -302,6 +302,9 @@ class Player(models.Model):
         help_text="Result of the last game played"
     )
     
+    # Authentication tracking
+    last_login = models.DateTimeField(blank=True, null=True, help_text="Last time player logged in")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

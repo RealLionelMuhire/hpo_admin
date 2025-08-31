@@ -76,6 +76,11 @@ def player_login_view(request):
             
             # Check password
             if check_password(password, player.password):
+                # Update last login timestamp
+                from django.utils import timezone
+                player.last_login = timezone.now()
+                player.save()
+                
                 # Use player's UUID as token for consistency
                 return Response({
                     'message': 'Login successful',
@@ -101,29 +106,38 @@ def player_login_view(request):
 
 
 @api_view(['POST'])
+@csrf_exempt
+@permission_classes([permissions.AllowAny])
 def player_logout_view(request):
     """
     API endpoint for player logout
-    Requires authentication
+    Since we're using Player UUIDs as tokens, logout is essentially just a client-side operation.
+    The server can validate the token and respond accordingly.
     """
     try:
-        # Get the token from the request and delete it
+        # Get the token from the request header
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
         if auth_header.startswith('Token '):
             token_key = auth_header.split(' ')[1]
-            token = Token.objects.get(key=token_key)
-            token.delete()
-            return Response({
-                'message': 'Logout successful'
-            }, status=status.HTTP_200_OK)
+            
+            # Verify the token is a valid Player UUID
+            try:
+                player = Player.objects.get(uuid=token_key)
+                # Since we're using UUIDs as tokens and they don't expire,
+                # logout is mainly a client-side operation
+                return Response({
+                    'message': 'Logout successful',
+                    'player_name': player.player_name
+                }, status=status.HTTP_200_OK)
+            except Player.DoesNotExist:
+                return Response({
+                    'error': 'Invalid token'
+                }, status=status.HTTP_401_UNAUTHORIZED)
         else:
             return Response({
-                'error': 'No token provided'
+                'error': 'No token provided',
+                'details': 'Authorization header must be in format: Token <uuid>'
             }, status=status.HTTP_400_BAD_REQUEST)
-    except Token.DoesNotExist:
-        return Response({
-            'error': 'Invalid token'
-        }, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         return Response({
             'error': 'Logout failed',

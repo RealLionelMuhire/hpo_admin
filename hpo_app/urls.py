@@ -1,9 +1,16 @@
 from django.urls import path
 from . import views
+from . import api_views
 
 app_name = 'hpo_app'
 
 urlpatterns = [
+    # Player authentication API endpoints
+    path('api/players/register/', api_views.PlayerRegistrationView.as_view(), name='player_register_api'),
+    path('api/players/login/', api_views.player_login_view, name='player_login_api'),
+    path('api/players/logout/', api_views.player_logout_view, name='player_logout_api'),
+    path('api/players/profile/', api_views.player_profile_view, name='player_profile_api'),
+    
     # API endpoints for questions
     path('api/questions/', views.questions_api, name='questions_api'),
     path('api/questions/<int:question_id>/', views.question_detail_api, name='question_detail_api'),

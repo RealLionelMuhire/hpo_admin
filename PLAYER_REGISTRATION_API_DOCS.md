@@ -4,7 +4,7 @@ This document describes the REST API endpoints for player self-registration and 
 
 ## Base URL
 ```
-http://localhost:8000/api/v1/
+http://localhost:8000/api/players/
 ```
 
 ## Authentication
@@ -18,7 +18,7 @@ Authorization: Token YOUR_UUID_TOKEN_HERE
 ## Endpoints
 
 ### 1. Player Registration
-**Endpoint:** `POST /api/v1/auth/register/`
+**Endpoint:** `POST /api/players/register/`
 **Authentication:** Not required
 **Description:** Register a new player account
 
@@ -43,22 +43,23 @@ Authorization: Token YOUR_UUID_TOKEN_HERE
 {
   "message": "Player registered successfully",
   "player": {
-    "id": 14,
-    "player_name": "Test User New",
-    "username": "testusernew2025",
-    "email": "testusernew2025@example.com",
-    "phone": "+250700555444",
-    "age_group": "20-24",
-    "gender": "male",
-    "province": "Eastern Province",
-    "district": "Rwamagana",
+    "id": 24,
+    "player_name": "Test User",
+    "username": "testuser999",
+    "email": "test999@example.com",
+    "phone": "+1234567890",
+    "age_group": null,
+    "gender": null,
+    "province": null,
+    "district": null,
     "points": 0,
     "games_played": 0,
     "games_won": 0,
     "win_rate": 0.0,
-    "created_at": "2025-08-30T14:19:03.611599Z"
+    "last_login": null,
+    "created_at": "2025-08-31T18:45:34.318560Z"
   },
-  "token": "46a28869-49d2-48be-9d44-d1a3ece1063a"
+  "token": "51a39b79-eb27-408b-a864-be41a5a73075"
 }
 ```
 
