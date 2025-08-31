@@ -4,10 +4,13 @@ from rest_framework.response import Response
 from rest_framework.authtoken.models import Token
 from django.contrib.auth.hashers import check_password
 from django.db import IntegrityError
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from .models import Player
 from .serializers import PlayerRegistrationSerializer, PlayerSerializer, PlayerLoginSerializer
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class PlayerRegistrationView(generics.CreateAPIView):
     """
     API endpoint for player self-registration
@@ -54,6 +57,7 @@ class PlayerRegistrationView(generics.CreateAPIView):
 
 
 @api_view(['POST'])
+@csrf_exempt
 @permission_classes([permissions.AllowAny])
 def player_login_view(request):
     """
