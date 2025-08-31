@@ -75,14 +75,14 @@ Authorization: Token YOUR_UUID_TOKEN_HERE
 ```
 
 ### 2. Player Login
-**Endpoint:** `POST /api/v1/auth/login/`
+**Endpoint:** `POST /api/players/login/`
 **Authentication:** Not required
-**Description:** Login with existing credentials
+**Description:** Login with existing credentials and update last_login timestamp
 
 #### Request Body
 ```json
 {
-  "username": "testusernew2025",
+  "username": "testuser999",
   "password": "securepass123"
 }
 ```
@@ -92,22 +92,23 @@ Authorization: Token YOUR_UUID_TOKEN_HERE
 {
   "message": "Login successful",
   "player": {
-    "id": 14,
-    "player_name": "Test User New",
-    "username": "testusernew2025",
-    "email": "testusernew2025@example.com",
-    "phone": "+250700555444",
-    "age_group": "20-24",
-    "gender": "male",
-    "province": "Eastern Province",
-    "district": "Rwamagana",
+    "id": 24,
+    "player_name": "Test User",
+    "username": "testuser999",
+    "email": "test999@example.com",
+    "phone": "+1234567890",
+    "age_group": null,
+    "gender": null,
+    "province": null,
+    "district": null,
     "points": 0,
     "games_played": 0,
     "games_won": 0,
     "win_rate": 0.0,
-    "created_at": "2025-08-30T14:19:03.611599Z"
+    "last_login": "2025-08-31T19:14:14.840030Z",
+    "created_at": "2025-08-31T18:45:34.318560Z"
   },
-  "token": "46a28869-49d2-48be-9d44-d1a3ece1063a"
+  "token": "51a39b79-eb27-408b-a864-be41a5a73075"
 }
 ```
 
@@ -120,46 +121,50 @@ Authorization: Token YOUR_UUID_TOKEN_HERE
 ```
 
 ### 3. Player Profile
-**Endpoint:** `GET /api/v1/auth/profile/`
+**Endpoint:** `GET /api/players/profile/`
 **Authentication:** Required
 **Description:** Get current player's profile information
 
 #### Success Response (200 OK)
 ```json
 {
-  "id": 14,
-  "player_name": "Test User New",
-  "username": "testusernew2025",
-  "email": "testusernew2025@example.com",
-  "phone": "+250700555444",
-  "age_group": "20-24",
-  "gender": "male",
-  "province": "Eastern Province",
-  "district": "Rwamagana",
+  "id": 24,
+  "player_name": "Test User",
+  "username": "testuser999",
+  "email": "test999@example.com",
+  "phone": "+1234567890",
+  "age_group": null,
+  "gender": null,
+  "province": null,
+  "district": null,
   "points": 0,
   "games_played": 0,
   "games_won": 0,
   "win_rate": 0.0,
-  "created_at": "2025-08-30T14:19:03.611599Z"
+  "last_login": "2025-08-31T19:14:14.840030Z",
+  "created_at": "2025-08-31T18:45:34.318560Z"
 }
 ```
 
 ### 4. Player Logout
-**Endpoint:** `POST /api/v1/auth/logout/`
+**Endpoint:** `POST /api/players/logout/`
 **Authentication:** Required
-**Description:** Logout and invalidate the current token
+**Description:** Logout and validate the current token (client-side token management)
 
 #### Success Response (200 OK)
 ```json
 {
-  "message": "Logout successful"
+  "message": "Logout successful",
+  "player_name": "Test User"
 }
 ```
+
+**Note:** Since we use UUID-based tokens that don't expire server-side, logout is primarily a client-side operation. The server validates the token and confirms the logout request.
 
 ## Helper Endpoints for Form Data
 
 ### 5. Get Age Groups
-**Endpoint:** `GET /api/v1/form-data/age-groups/`
+**Endpoint:** `GET /api/players/form-data/age-groups/`
 **Authentication:** Not required
 **Description:** Get available age group options
 
@@ -176,7 +181,7 @@ Authorization: Token YOUR_UUID_TOKEN_HERE
 ```
 
 ### 6. Get Provinces and Districts
-**Endpoint:** `GET /api/v1/form-data/provinces-districts/`
+**Endpoint:** `GET /api/players/form-data/provinces-districts/`
 **Authentication:** Not required
 **Description:** Get available provinces and their districts
 
@@ -206,7 +211,7 @@ Authorization: Token YOUR_UUID_TOKEN_HERE
 ```
 
 ### 7. Get Gender Choices
-**Endpoint:** `GET /api/v1/form-data/genders/`
+**Endpoint:** `GET /api/players/form-data/genders/`
 **Authentication:** Not required
 **Description:** Get available gender options
 
@@ -260,12 +265,22 @@ The API validates that the selected district belongs to the selected province. V
 
 ✅ **API Status**: Fully tested and working!
 
-**Recent Test Results (2025-08-30):**
-- ✅ Registration: Successfully creates new players
-- ✅ Login: Successfully authenticates existing players  
+**Recent Test Results (2025-08-31):**
+- ✅ Registration: Successfully creates new players with all fields
+- ✅ Login: Successfully authenticates existing players and updates last_login
+- ✅ Last Login Tracking: Automatically updates timestamp on successful login
 - ✅ Token Generation: UUID-based tokens working correctly
+- ✅ Logout: Token validation working (client-side logout recommended)
+- ✅ Profile: Returns complete player data including last_login
 - ✅ Validation: Duplicate username/email detection working
 - ✅ Error Handling: Proper error responses for validation failures
+- ✅ CORS: Configured for React frontend integration
+
+**Test Data Used:**
+- Username: `testuser999`
+- Password: `securepass123`
+- Token: `51a39b79-eb27-408b-a864-be41a5a73075`
+- Last Login: `2025-08-31T19:14:14.840030Z`
 
 Use the provided test script to test all endpoints:
 
@@ -286,7 +301,7 @@ python3 manage.py runserver
 ```javascript
 const registerPlayer = async (formData) => {
   try {
-    const response = await fetch('http://localhost:8000/api/v1/auth/register/', {
+    const response = await fetch('http://localhost:8000/api/players/register/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -317,7 +332,7 @@ const getProfile = async () => {
   const token = localStorage.getItem('authToken');
   
   try {
-    const response = await fetch('http://localhost:8000/api/v1/auth/profile/', {
+    const response = await fetch('http://localhost:8000/api/players/profile/', {
       headers: {
         'Authorization': `Token ${token}`,
         'Content-Type': 'application/json',
@@ -327,6 +342,54 @@ const getProfile = async () => {
     return await response.json();
   } catch (error) {
     console.error('Error fetching profile:', error);
+  }
+};
+
+const loginPlayer = async (credentials) => {
+  try {
+    const response = await fetch('http://localhost:8000/api/players/login/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(credentials)
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      // Store token and note the last_login timestamp
+      localStorage.setItem('authToken', data.token);
+      console.log('Login successful. Last login:', data.player.last_login);
+      return { success: true, data };
+    } else {
+      return { success: false, error: data.error };
+    }
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+const logoutPlayer = async () => {
+  const token = localStorage.getItem('authToken');
+  
+  try {
+    const response = await fetch('http://localhost:8000/api/players/logout/', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${token}`,
+        'Content-Type': 'application/json',
+      }
+    });
+    
+    if (response.ok) {
+      // Remove token from storage
+      localStorage.removeItem('authToken');
+      console.log('Logout successful');
+      return { success: true };
+    }
+  } catch (error) {
+    console.error('Logout error:', error);
   }
 };
 ```
