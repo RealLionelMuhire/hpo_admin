@@ -268,13 +268,18 @@ def create_game_api(request):
     Create a new game session
     POST payload: {
         "participant_count": 2,  # 1, 2, 4, or 6
-        "players": [1, 2]  # Array of player IDs
+        "players": [  # Array of player objects with IDs and optional teams
+            {"player_id": 1, "team": 1},  # New format with team assignment
+            {"player_id": 2, "team": 2}
+        ]
+        # OR
+        "players": [1, 2]  # Legacy format - simple array of player IDs
     }
     """
     try:
         data = json.loads(request.body)
         participant_count = data.get('participant_count')
-        player_ids = data.get('players', [])
+        players_data = data.get('players', [])
         
         # Validate participant count
         valid_counts = [1, 2, 4, 6]
@@ -284,21 +289,39 @@ def create_game_api(request):
                 'error': f'Invalid participant count. Must be one of: {valid_counts}'
             }, status=400)
         
-        # Validate player IDs array
-        if len(player_ids) != participant_count:
+        # Validate players array
+        if len(players_data) != participant_count:
             return JsonResponse({
                 'success': False,
-                'error': f'Number of player IDs ({len(player_ids)}) must match participant count ({participant_count})'
+                'error': f'Number of players ({len(players_data)}) must match participant count ({participant_count})'
             }, status=400)
         
-        # Validate all player IDs are integers
-        try:
-            player_ids = [int(pid) for pid in player_ids]
-        except (ValueError, TypeError):
-            return JsonResponse({
-                'success': False,
-                'error': 'All player IDs must be valid integers'
-            }, status=400)
+        # Parse player data - support both old format (just IDs) and new format (with teams)
+        players_info = []
+        for i, player_data in enumerate(players_data):
+            if isinstance(player_data, dict):
+                # New format: {"player_id": 1, "team": 1}
+                try:
+                    player_id = int(player_data.get('player_id'))
+                    team = player_data.get('team')
+                    if team is not None:
+                        team = int(team)
+                    players_info.append({'player_id': player_id, 'team': team})
+                except (ValueError, TypeError):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'All player IDs and teams must be valid integers'
+                    }, status=400)
+            else:
+                # Legacy format: just player ID
+                try:
+                    player_id = int(player_data)
+                    players_info.append({'player_id': player_id, 'team': None})
+                except (ValueError, TypeError):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'All player IDs must be valid integers'
+                    }, status=400)
         
         with transaction.atomic():
             # Create the game
@@ -307,8 +330,11 @@ def create_game_api(request):
                 status='waiting'
             )
             
-            # Add players to the game using their IDs
-            for i, player_id in enumerate(player_ids):
+            # Add players to the game
+            for i, player_info in enumerate(players_info):
+                player_id = player_info['player_id']
+                client_team = player_info['team']
+                
                 try:
                     player = Player.objects.get(id=player_id)
                 except Player.DoesNotExist:
@@ -317,10 +343,20 @@ def create_game_api(request):
                         'error': f'Player with ID {player_id} not found'
                     }, status=400)
                 
-                # Assign team (for 1 player game, always team 1)
+                # Determine team assignment
                 if participant_count == 1:
+                    # Single player games always use team 1
                     team = 1
+                elif client_team is not None:
+                    # Use client-provided team assignment
+                    if client_team not in [1, 2]:
+                        return JsonResponse({
+                            'success': False,
+                            'error': f'Team assignment must be 1 or 2, got {client_team}'
+                        }, status=400)
+                    team = client_team
                 else:
+                    # Legacy mode: auto-assign teams (split evenly)
                     team = 1 if i < participant_count // 2 else 2
                 
                 # Create game participant

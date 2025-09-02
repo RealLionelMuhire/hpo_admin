@@ -12,9 +12,10 @@ This document describes the Game MVC system that allows players to participate i
 6. **Check Status**: Monitor game progress and results
 
 **Important Game Logic:**
-- **Losing team chooses cards** through the game UI
-- **Winners receive fun facts** from explanations of questions associated with chosen cards
-- **Losers receive questions** from the cards they chose and must answer them
+- **Team assignments are based on initial team setup** provided during game creation
+- **Losing team members receive questions** from chosen cards and must answer them
+- **Winning team members receive fun facts/explanations** from the same cards  
+- **Cards are chosen during gameplay** and determine content for both teams
 - **UI handles answer validation** using question data that includes correct answers and points
 - **Points are awarded** only for correct answers via dedicated endpoints
 
@@ -56,28 +57,87 @@ POST /api/games/create/
 ```
 
 **Request Body:**
+
+For **single player** (no teams):
 ```json
 {
-    "participant_count": 2,
-    "players": [1, 2]
+    "participant_count": 1,
+    "players": [
+        {
+            "player_id": 1
+        }
+    ]
 }
 ```
 
-**Note**: `players` is now an array of player IDs. Players must exist in the database before creating a game.
+For **multiplayer** (with team assignments):
+```json
+{
+    "participant_count": 4,
+    "players": [
+        {
+            "player_id": 1,
+            "team": 1
+        },
+        {
+            "player_id": 2,
+            "team": 1
+        },
+        {
+            "player_id": 3,
+            "team": 2
+        },
+        {
+            "player_id": 4,
+            "team": 2
+        }
+    ]
+}
+```
+
+**Note**: 
+- Players must exist in the database before creating a game
+- For single player games (`participant_count: 1`), no team assignment is needed
+- For multiplayer games, each player must be assigned to a team (1 or 2)
+- Team assignments are provided by the client, not automatically split
 
 **Valid participant counts:** 1, 2, 4, 6
-- 1 participant = Player vs Computer (1 team)
-- 2+ participants = 2 teams (participants split evenly)
+- 1 participant = Player vs Computer (no teams)
+- 2+ participants = 2 teams (team assignments provided in request)
 
 **Response:**
+
+For **single player**:
 ```json
 {
     "success": true,
     "game": {
         "match_id": "550e8400-e29b-41d4-a716-446655440000",
-        "participant_count": 2,
-        "team_count": 2,
+        "participant_count": 1,
+        "team_count": 1,
         "players_per_team": 1,
+        "status": "active",
+        "participants": [
+            {
+                "player_id": 1,
+                "username": "player1", 
+                "player_name": "Alice",
+                "team": 1
+            }
+        ]
+    }
+}
+```
+
+For **multiplayer**:
+```json
+{
+    "success": true,
+    "game": {
+        "match_id": "550e8400-e29b-41d4-a716-446655440000",
+        "participant_count": 4,
+        "team_count": 2,
+        "players_per_team": 2,
         "status": "active",
         "participants": [
             {
@@ -90,6 +150,18 @@ POST /api/games/create/
                 "player_id": 2,
                 "username": "player2", 
                 "player_name": "Bob", 
+                "team": 1
+            },
+            {
+                "player_id": 3,
+                "username": "player3", 
+                "player_name": "Charlie", 
+                "team": 2
+            },
+            {
+                "player_id": 4,
+                "username": "player4", 
+                "player_name": "Diana", 
                 "team": 2
             }
         ]
@@ -622,18 +694,23 @@ GET /api/leaderboard/?metric=win_rate&limit=10
 - **Losing team members**: Each gets 0 marks
 
 ### Winner Responses
-Winners receive fun facts from the `explanation` field of questions associated with cards that losing players received.
+Players on the **winning team** (based on their initial team assignment) receive fun facts from the `explanation` field of questions associated with cards chosen during gameplay.
 
-### Loser Responses
-Losing players receive questions associated with their assigned card and must answer them.
+### Loser Responses  
+Players on the **losing team** (based on their initial team assignment) receive questions associated with the cards and must answer them to earn additional points.
 
-### Card Assignment
-When a game is completed, losing players are assigned cards from:
-1. Cards chosen by the losing team during gameplay (provided in the `cards_chosen` field)
-2. If specific cards are chosen, they are distributed among losing players
-3. If no cards are specified, random cards are assigned to losing players
+### Card Assignment and Response Logic
+When a game is completed:
+1. Cards are chosen during gameplay (provided in the `cards_chosen` field)
+2. **Losing team members** receive questions from the chosen cards
+3. **Winning team members** receive fun facts (explanations) from questions associated with the same cards
+4. If no specific cards are chosen, random cards are assigned
 
-**Important**: Only losing team members choose cards and receive questions. Winners automatically receive fun facts from the explanations of questions associated with the chosen cards.
+**Important Response Rules:**
+- Team assignment determines response type: **losing team gets questions**, **winning team gets explanations**
+- All players return to their **initial assigned teams** for response determination
+- Questions contain both the question text (for losers) and explanation text (for winners)
+- Winners automatically receive educational content without needing to answer questions
 
 ### Player Statistics Tracking
 The system automatically tracks comprehensive statistics for each player:
@@ -741,7 +818,16 @@ curl -X POST http://localhost:8000/api/games/create/ \
   -H "Content-Type: application/json" \
   -d '{
     "participant_count": 2,
-    "players": [1, 2]
+    "players": [
+        {
+            "player_id": 1,
+            "team": 1
+        },
+        {
+            "player_id": 2,
+            "team": 2
+        }
+    ]
   }'
 ```
 
