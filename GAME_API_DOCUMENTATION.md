@@ -372,6 +372,7 @@ Returns different responses for winners and losers:
             },
             "question": {
                 "id": 123,
+                "language": "kinyarwanda",
                 "question_text": "What suit is associated with conflict?",
                 "question_type": "multiple_choice",
                 "options": ["Hearts", "Spades", "Clubs", "Diamonds"],
@@ -618,6 +619,7 @@ curl https://admin.hporwanda.org/api/cards/S3/questions/
     "questions": [
         {
             "id": 1,
+            "language": "kinyarwanda",
             "question_text": "Capital City of Rwanda",
             "question_type": "multiple_choice",
             "options": ["Bujumbura", "Kampala", "Kigali", "Kinshasa"],

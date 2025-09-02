@@ -44,6 +44,7 @@ def questions_by_card_api(request):
         for question in questions:
             question_data = {
                 'id': question.id,
+                'language': question.language,
                 'question_text': question.question_text,
                 'question_type': question.question_type,
                 'options': question.options,
@@ -623,6 +624,7 @@ def get_game_responses_api(request, match_id):
                             'card_info': question.get_card_info(),
                             'question': {
                                 'id': question.id,
+                                'language': question.language,
                                 'question_text': question.question_text,
                                 'question_type': question.question_type,
                                 'options': question.options,
