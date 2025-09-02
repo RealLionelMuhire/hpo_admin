@@ -1,7 +1,6 @@
 from rest_framework import status, generics, permissions
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.authtoken.models import Token
 from django.contrib.auth.hashers import check_password
 from django.db import IntegrityError
 from django.views.decorators.csrf import csrf_exempt
@@ -146,6 +145,8 @@ def player_logout_view(request):
 
 
 @api_view(['GET', 'PUT'])
+@csrf_exempt
+@permission_classes([permissions.AllowAny])
 def player_profile_view(request):
     """
     API endpoint to get and update player profile
@@ -159,8 +160,8 @@ def player_profile_view(request):
     token_key = auth_header.split(' ')[1]
     
     try:
-        token = Token.objects.select_related('user').get(key=token_key)
-        player = Player.objects.get(id=token.user_id)
+        # Use Player UUID as token (same as login/logout views)
+        player = Player.objects.get(uuid=token_key)
         
         if request.method == 'GET':
             return Response(PlayerSerializer(player).data, status=status.HTTP_200_OK)
@@ -172,7 +173,7 @@ def player_profile_view(request):
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
             
-    except (Token.DoesNotExist, Player.DoesNotExist):
+    except Player.DoesNotExist:
         return Response({'error': 'Invalid token'}, status=status.HTTP_401_UNAUTHORIZED)
     except Exception as e:
         return Response({
