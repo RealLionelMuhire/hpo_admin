@@ -69,10 +69,11 @@ class QuestionAdminForm(forms.ModelForm):
     class Meta:
         model = Question
         fields = [
-            'question_text', 'question_type', 'card', 'options', 
+            'language', 'question_text', 'question_type', 'card', 'options', 
             'correct_answer', 'explanation', 'points', 'difficulty'
         ]
         widgets = {
+            'language': forms.Select(attrs={'class': 'form-control language-selector'}),
             'question_text': forms.Textarea(attrs={'rows': 4, 'cols': 80}),
             'explanation': forms.Textarea(attrs={'rows': 3, 'cols': 80}),
             'options': forms.HiddenInput(),  # Hide the raw JSON field
@@ -91,6 +92,11 @@ class QuestionAdminForm(forms.ModelForm):
                         self.initial[field_name] = option
         
         # Add CSS classes and help text
+        self.fields['language'].help_text = 'Select the language for this question'
+        self.fields['language'].widget.attrs.update({
+            'style': 'width: 200px; margin-bottom: 10px;'
+        })
+        
         self.fields['question_text'].widget.attrs.update({
             'placeholder': 'Enter your question here...',
             'class': 'vLargeTextField'

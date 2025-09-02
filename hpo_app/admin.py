@@ -192,8 +192,8 @@ class PlayerAdmin(admin.ModelAdmin):
 @admin.register(Question)
 class QuestionAdmin(admin.ModelAdmin):
     form = QuestionAdminForm
-    list_display = ['question_text', 'question_type', 'get_options_display', 'get_card_display', 'correct_answer', 'difficulty', 'points', 'created_at']
-    list_filter = ['question_type', 'difficulty', 'card', 'created_at']
+    list_display = ['question_text', 'language', 'question_type', 'get_options_display', 'get_card_display', 'correct_answer', 'difficulty', 'points', 'created_at']
+    list_filter = ['language', 'question_type', 'difficulty', 'card', 'created_at']
     search_fields = ['question_text', 'correct_answer', 'card']
     readonly_fields = ['created_at', 'updated_at']
     
@@ -239,9 +239,9 @@ class QuestionAdmin(admin.ModelAdmin):
     get_card_display.short_description = 'Card'
     
     fieldsets = (
-        ('Question', {
-            'fields': ('question_text', 'question_type'),
-            'description': 'Enter your question and select the type'
+        ('Language & Question', {
+            'fields': ('language', 'question_text', 'question_type'),
+            'description': 'Select the language and enter your question'
         }),
         ('Answer Options - Multiple Choice', {
             'fields': ('option_1', 'option_2', 'option_3', 'option_4'),

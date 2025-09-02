@@ -377,6 +377,22 @@ class Player(models.Model):
 
 class Question(models.Model):
     """Individual question model"""
+    
+    # Language field choices
+    LANGUAGE_CHOICES = [
+        ('english', 'English'),
+        ('french', 'French'),
+        ('swahili', 'Swahili'),
+        ('kinyarwanda', 'Kinyarwanda'),
+    ]
+    
+    language = models.CharField(
+        max_length=20,
+        choices=LANGUAGE_CHOICES,
+        default='kinyarwanda',
+        help_text="Language for this question"
+    )
+    
     question_text = models.TextField()
     question_type = models.CharField(
         max_length=20,
