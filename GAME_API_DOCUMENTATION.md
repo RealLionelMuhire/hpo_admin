@@ -1,50 +1,33 @@
 # Game API Documentation
 
-This document describes the Game MVC system that allows players to participate in card games where winners receive fun facts and losers answer questions.
+This document describes the simplified Game MVC system that allows players to participate in card games with a player-centric workflow.
 
 ## Game Flow Overview
 
 1. **Create Game**: Frontend creates a game session with only participant count and receives a match_id
 2. **Distribute Match ID**: Frontend distributes the match_id to all players  
 3. **Individual Player Submission**: Each player submits their win/loss result using the same match_id
-4. **Get Player Response**: Each player gets their specific response (winners get fun facts, losers get questions)
-5. **Submit Answers**: Losing players submit answers to their questions
-6. **Award Points**: Points are awarded for correct answers and statistics are updated
+4. **Automatic Response Generation**: System automatically generates appropriate responses (winners get explanations, losers get questions)
+5. **Frontend Answer Validation**: For losers, frontend validates answers and calls award-points endpoint if correct
 
 **Important Game Logic:**
-- **Game creation is simplified** - only participant count is needed initially
-- **Players submit individually** - each player reports their own win/loss status using the shared match_id
-- **Team assignments are determined** during individual player submissions (team 1 = winners, team 2 = losers)
-- **Response assignment is automatic** - winners automatically get fun facts, losers get questions based on their submission
-- **Match completion** - game is completed when all expected players have submitted their results
+- **Winners**: Automatically get 1 mark and receive explanation (fun fact) from question model
+- **Losers**: Get full question object, frontend validates answer, backend awards mark if correct
+- **No "question_answered" or "answer_correct" fields** needed in the submission for winners
+- **Simplified workflow** reduces code duplication and clarifies responsibilities
 
-## UI-Driven Answer Validation Workflow
+## Post-Game Response Logic
 
-The new workflow allows the game UI to handle answer validation client-side:
+### Winners
+- Automatically receive 1 mark
+- Get explanation/fun fact from a question related to their context
+- No additional action needed
 
-1. **Get Questions**: UI calls `/api/cards/{card_id}/questions/` to get question data including `correct_answer` and `points`
-2. **Player Answers**: Player submits answer through UI
-3. **UI Validates**: UI compares player's answer with `correct_answer` from question data
-4. **Award Points**: If correct, UI calls `/api/games/award-points/` to award points to player
-5. **Record Wrong Answer**: If incorrect, UI calls `/api/games/record-wrong-answer/` to track the attempt
-
-**Benefits:**
-- Faster response time (no server round-trip for validation)
-- More flexible UI interactions
-- Server still validates answers for security
-- Detailed player statistics tracking
-
-## Complete Game Submission Workflow
-
-The system supports submitting complete game data from the UI with full model synchronization:
-
-**Purpose**: Submit a fully completed game ensuring synchronization with:
-- **Games** model (main game record)
-- **GameParticipants** model (player participation records)  
-- **GameResponses** model (winner fun facts and loser questions)
-- **GameResults** model (final game outcome)
-- **Players** model (updated statistics)
-- **Questions** model (reference linking)
+### Losers  
+- Receive full question object including `correct_answer`
+- Frontend is responsible for answer validation
+- If correct answer: frontend calls `/api/games/award-points/` to award 1 mark
+- If wrong answer: no mark awarded
 
 ## API Endpoints
 
@@ -55,7 +38,7 @@ All endpoints are **unauthenticated** and use JSON for request/response.
 POST /api/games/create/
 ```
 
-**Description**: Create a new game session by specifying only the participant count. The server generates a unique match_id that will be distributed to all players in the frontend.
+**Description**: Create a new game session by specifying only the participant count. The server generates a unique match_id that will be distributed to all players.
 
 **Request Body:**
 ```json
@@ -66,7 +49,7 @@ POST /api/games/create/
 
 **Valid participant counts:** 1, 2, 4, 6
 - 1 participant = Player vs Computer (no teams)
-- 2+ participants = 2 teams (players will be assigned teams when they submit results)
+- 2+ participants = 2 teams (players assigned when they submit results)
 
 **Response:**
 ```json
@@ -82,17 +65,107 @@ POST /api/games/create/
 }
 ```
 
-**Note**: The match_id should be distributed to all players in the frontend. Each player will use this same match_id to submit their individual results.
-
-### 2. Complete Game (Legacy)
+### 2. Submit Completed Game Result (Player-Centric)
 ```
-POST /api/games/complete/
+POST /api/games/submit-completed/
 ```
 
-**Note**: This endpoint is for incrementally completing an existing active game. For submitting complete game data from UI, use the Submit Completed Game endpoint below.
+**Description**: Each player individually submits their game result using the shared match_id. The system automatically generates appropriate responses and awards marks.
 
 **Request Body:**
 ```json
+{
+    "match_id": "550e8400-e29b-41d4-a716-446655440000",
+    "player_id": 1,
+    "username": "alice",
+    "team": 1,
+    "is_winner": true,
+    "lost_card": null
+}
+```
+
+**For Losers (include lost_card):**
+```json
+{
+    "match_id": "550e8400-e29b-41d4-a716-446655440000",
+    "player_id": 2,
+    "username": "bob",
+    "team": 2,
+    "is_winner": false,
+    "lost_card": "S3"
+}
+```
+
+**Winner Response:**
+```json
+{
+    "success": true,
+    "message": "Game result submitted successfully",
+    "player": {
+        "player_id": 1,
+        "username": "alice",
+        "team": 1,
+        "is_winner": true,
+        "marks_earned": 1
+    },
+    "response": {
+        "type": "explanation",
+        "explanation": "Did you know that the 3 of Spades represents new beginnings and challenges?",
+        "marks_earned": 1
+    },
+    "game_status": {
+        "match_id": "550e8400-e29b-41d4-a716-446655440000",
+        "participants_submitted": 2,
+        "participants_expected": 4,
+        "status": "waiting",
+        "completed": false
+    }
+}
+```
+
+**Loser Response:**
+```json
+{
+    "success": true,
+    "message": "Game result submitted successfully", 
+    "player": {
+        "player_id": 2,
+        "username": "bob",
+        "team": 2,
+        "is_winner": false,
+        "marks_earned": 0
+    },
+    "response": {
+        "type": "question",
+        "question": {
+            "id": 123,
+            "question_text": "What does the 3 of Spades traditionally represent?",
+            "question_type": "multiple_choice",
+            "options": ["New beginnings", "Challenges", "Both", "Neither"],
+            "correct_answer": "Both",
+            "explanation": "The 3 of Spades represents both new beginnings and challenges in traditional card meaning.",
+            "points": 1,
+            "difficulty": "easy",
+            "card": "S3",
+            "card_info": {
+                "suit": "Spades",
+                "value": "3",
+                "pointValue": 0,
+                "symbol": "♠",
+                "id": "S3"
+            }
+        },
+        "instruction": "Answer this question correctly to earn 1 mark"
+    },
+    "game_status": {
+        "match_id": "550e8400-e29b-41d4-a716-446655440000",
+        "participants_submitted": 2,
+        "participants_expected": 4,
+        "status": "waiting",
+        "completed": false
+    }
+}
+```
 **Request Body:**
 ```json
 {
@@ -295,47 +368,53 @@ POST /api/games/submit-answer/
 }
 ```
 
-### 4a. Award Points (New Workflow)
+### 3. Award Points to Losers
 ```
 POST /api/games/award-points/
 ```
 
-**Description**: Award points to a player after the UI validates the answer is correct using question data from the card/questions endpoint.
+**Description**: Award points to a losing player after the frontend validates their answer is correct. This endpoint is called by the frontend after it compares the player's answer with the `correct_answer` field from the question object.
 
 **Request Body:**
 ```json
 {
     "match_id": "550e8400-e29b-41d4-a716-446655440000",
-    "player_id": 2,
-    "username": "player2",
+    "username": "bob",
     "question_id": 123,
-    "answer": "Spades",
+    "answer": "Both",
     "points": 1
 }
 ```
-
-**Note**: Both `player_id` and `username` are required for proper player identification and database synchronization.
 
 **Response:**
 ```json
 {
     "success": true,
+    "message": "Awarded 1 point(s) to bob for correct answer",
     "result": {
         "points_awarded": 1,
         "player": {
-            "username": "player2",
+            "username": "bob",
+            "total_marks": 1,
             "total_correct_answers": 15,
             "total_questions_answered": 20,
             "answer_accuracy": 75.0
         },
         "question": {
             "id": 123,
-            "points": 1,
-            "explanation": "Spades represent conflict and challenges in card symbolism."
+            "explanation": "The 3 of Spades represents both new beginnings and challenges in traditional card meaning.",
+            "points": 1
         }
     }
 }
 ```
+
+**Features:**
+- Backend validates the answer for security (even though frontend already validated)
+- Updates player's game marks and overall statistics
+- Updates game result team marks
+- Prevents duplicate point awards
+- Returns explanation for educational value
 
 ### 4b. Record Wrong Answer
 ```

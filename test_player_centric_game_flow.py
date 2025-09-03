@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Test script for the new player-centric game workflow
-Tests the complete flow from game creation to answer submission
+Test script for the simplified player-centric game workflow
+Tests the complete flow: game creation -> player submissions -> automatic responses -> mark awards
 """
 
 import requests

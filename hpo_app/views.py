@@ -9,6 +9,168 @@ from django.utils import timezone
 from django.db import transaction
 from django.db.models import Sum
 
+# Helper function to avoid code duplication
+def create_game_participant(game, player, team, is_winner, lost_card=None):
+    """
+    Helper function to create a game participant with proper marks allocation
+    Returns the created participant instance
+    """
+    marks_earned = 1 if is_winner else 0  # Winners automatically get 1 mark
+    
+    participant = GameParticipant.objects.create(
+        game=game,
+        player=player,
+        team=team,
+        is_winner=is_winner,
+        marks_earned=marks_earned,
+        lost_card=lost_card if not is_winner else None,
+        question_answered=False,  # Will be updated later for losers
+        answer_correct=False      # Will be updated later for losers
+    )
+    
+    # Update player's game statistics
+    player.update_game_stats(
+        won=is_winner,
+        marks_earned=marks_earned,
+        questions_answered=0,  # Will be updated separately for losers
+        correct_answers=0      # Will be updated separately for losers
+    )
+    
+    return participant
+
+def generate_post_game_response(participant, lost_card=None):
+    """
+    Helper function to generate appropriate response for winners/losers
+    Returns response data and creates GameResponse record
+    """
+    response_data = {}
+    
+    if participant.is_winner:
+        # Winners get explanation (fun fact) from a question
+        if lost_card:
+            questions = Question.objects.filter(card=lost_card)
+            if questions.exists():
+                question = questions.first()
+                response_data = {
+                    'type': 'explanation',
+                    'explanation': question.explanation,
+                    'card': lost_card,
+                    'marks_earned': participant.marks_earned
+                }
+            else:
+                response_data = {
+                    'type': 'explanation',
+                    'explanation': 'Congratulations on your victory!',
+                    'marks_earned': participant.marks_earned
+                }
+        else:
+            response_data = {
+                'type': 'explanation',
+                'explanation': 'Congratulations on your victory!',
+                'marks_earned': participant.marks_earned
+            }
+            
+        # Create winner response in GameResponse model
+        GameResponse.objects.create(
+            game=participant.game,
+            participant=participant,
+            response_type='fun_fact',
+            fun_fact_text=response_data.get('explanation', 'Congratulations!')
+        )
+        
+    else:
+        # Losers get full question object for their lost card
+        if lost_card:
+            questions = Question.objects.filter(card=lost_card)
+            if questions.exists():
+                question = questions.first()
+                response_data = {
+                    'type': 'question',
+                    'question': {
+                        'id': question.id,
+                        'question_text': question.question_text,
+                        'question_type': question.question_type,
+                        'options': question.options,
+                        'correct_answer': question.correct_answer,  # Frontend will validate
+                        'explanation': question.explanation,
+                        'points': question.points,
+                        'difficulty': question.difficulty,
+                        'card': question.card,
+                        'card_info': question.get_card_info()
+                    },
+                    'instruction': 'Answer this question correctly to earn 1 mark'
+                }
+                
+                # Create loser response in GameResponse model
+                GameResponse.objects.create(
+                    game=participant.game,
+                    participant=participant,
+                    response_type='question',
+                    question=question
+                )
+            else:
+                response_data = {
+                    'type': 'no_question',
+                    'message': f'No questions available for card {lost_card}'
+                }
+        else:
+            response_data = {
+                'type': 'no_card',
+                'message': 'No card specified for loser'
+            }
+    
+    return response_data
+
+def finalize_game_if_complete(game):
+    """
+    Helper function to check if game is complete and finalize it
+    Returns game status information
+    """
+    participants_submitted = game.participants.count()
+    participants_expected = game.participant_count
+    
+    if participants_submitted >= participants_expected:
+        game.status = 'completed'
+        game.completed_at = timezone.now()
+        
+        # Determine winning team
+        team1_winners = game.participants.filter(team=1, is_winner=True).count()
+        team2_winners = game.participants.filter(team=2, is_winner=True).count()
+        
+        if team1_winners > team2_winners:
+            game.winning_team = 1
+        elif team2_winners > team1_winners:
+            game.winning_team = 2
+        # If tie, leave winning_team as None
+        
+        game.save()
+        
+        # Create or update game result
+        team1_marks = game.participants.filter(team=1).aggregate(
+            total=Sum('marks_earned'))['total'] or 0
+        team2_marks = game.participants.filter(team=2).aggregate(
+            total=Sum('marks_earned'))['total'] or 0
+        
+        GameResult.objects.get_or_create(
+            game=game,
+            defaults={
+                'team1_marks': team1_marks,
+                'team2_marks': team2_marks,
+                'result_summary': {
+                    'winning_team': game.winning_team,
+                    'completed_at': game.completed_at.isoformat(),
+                    'participants_count': participants_submitted
+                }
+            }
+        )
+    
+    return {
+        'participants_submitted': participants_submitted,
+        'participants_expected': participants_expected,
+        'status': game.status,
+        'completed': participants_submitted >= participants_expected
+    }
+
 # Create your views here.
 
 @csrf_exempt
@@ -922,7 +1084,8 @@ def get_card_questions_api(request, card_id):
 @require_http_methods(["POST"])
 def award_points_api(request):
     """
-    Award points to a player after UI validates correct answer
+    Award points to a player after frontend validates correct answer
+    Used specifically for losers who answered questions correctly
     POST payload: {
         "match_id": "uuid-string",
         "username": "player1",
@@ -937,82 +1100,114 @@ def award_points_api(request):
         username = data.get('username')
         question_id = data.get('question_id')
         answer = data.get('answer')
-        points = data.get('points')
+        points = data.get('points', 1)  # Default to 1 point
         
-        if not all([match_id, username, question_id, answer, points]):
+        if not all([match_id, username, question_id, answer]):
             return JsonResponse({
                 'success': False,
-                'error': 'match_id, username, question_id, answer, and points are required'
+                'error': 'match_id, username, question_id, and answer are required'
             }, status=400)
         
         try:
-            game = Game.objects.get(match_id=match_id, status='completed')
+            game = Game.objects.get(match_id=match_id)
             participant = game.participants.get(player__username=username, is_winner=False)
             question = Question.objects.get(id=question_id)
             
             # Verify the answer is actually correct (security check)
-            if answer.strip() != question.correct_answer.strip():
+            if answer.strip().lower() != question.correct_answer.strip().lower():
                 return JsonResponse({
                     'success': False,
                     'error': 'Answer is not correct'
                 }, status=400)
             
-            # Check if response already exists, if not create one
-            response, created = GameResponse.objects.get_or_create(
-                game=game,
-                participant=participant,
-                response_type='question',
-                defaults={
-                    'question': question,
-                    'player_answer': answer,
-                    'is_correct': True
-                }
-            )
+            # Check if already answered to prevent duplicate points
+            if participant.question_answered and participant.answer_correct:
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Player has already answered this question correctly'
+                }, status=400)
             
-            if not created:
-                # Update existing response
-                response.player_answer = answer
-                response.is_correct = True
-                response.save()
-            
-            # Update participant
-            participant.question_answered = True
-            participant.answer_correct = True
-            participant.save()
-            
-            # Update player's question answering statistics
             with transaction.atomic():
-                current_correct = participant.player.correct_answers
-                current_total = participant.player.questions_answered
+                # Update participant with correct answer and award marks
+                participant.question_answered = True
+                participant.answer_correct = True
+                participant.marks_earned += points  # Add the earned mark
+                participant.save()
                 
-                participant.player.questions_answered = current_total + 1
-                participant.player.correct_answers = current_correct + 1
-                participant.player.save()
+                # Update or create game response
+                response, created = GameResponse.objects.get_or_create(
+                    game=game,
+                    participant=participant,
+                    response_type='question',
+                    defaults={
+                        'question': question,
+                        'player_answer': answer,
+                        'is_correct': True
+                    }
+                )
+                
+                if not created:
+                    # Update existing response
+                    response.player_answer = answer
+                    response.is_correct = True
+                    response.save()
+                
+                # Update player's overall statistics
+                player = participant.player
+                player.total_game_marks += points
+                player.questions_answered += 1
+                player.correct_answers += 1
+                player.save()
+                
+                # Update game result marks
+                game_result = GameResult.objects.get(game=game)
+                if participant.team == 1:
+                    game_result.team1_marks += points
+                else:
+                    game_result.team2_marks += points
+                game_result.save()
             
             return JsonResponse({
                 'success': True,
+                'message': f'Awarded {points} point(s) to {username} for correct answer',
                 'result': {
                     'points_awarded': points,
                     'player': {
                         'username': username,
-                        'total_correct_answers': participant.player.correct_answers,
-                        'total_questions_answered': participant.player.questions_answered,
-                        'answer_accuracy': round((participant.player.correct_answers / participant.player.questions_answered) * 100, 2) if participant.player.questions_answered > 0 else 0
+                        'total_marks': participant.marks_earned,
+                        'total_correct_answers': player.correct_answers,
+                        'total_questions_answered': player.questions_answered,
+                        'answer_accuracy': round((player.correct_answers / player.questions_answered) * 100, 2) if player.questions_answered > 0 else 0
                     },
                     'question': {
                         'id': question.id,
-                        'points': points,
-                        'explanation': question.explanation
+                        'explanation': question.explanation,
+                        'points': question.points
                     }
                 }
             })
             
-        except (Game.DoesNotExist, GameParticipant.DoesNotExist, Question.DoesNotExist) as e:
+        except Game.DoesNotExist:
             return JsonResponse({
                 'success': False,
-                'error': f'Game, participant, or question not found: {str(e)}'
+                'error': f'Game with match_id {match_id} not found'
             }, status=404)
-    
+        except GameParticipant.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'Player {username} not found as a loser in this game'
+            }, status=404)
+        except Question.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'Question with ID {question_id} not found'
+            }, status=404)
+            
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON payload'
+        }, status=400)
     except Exception as e:
         return JsonResponse({
             'success': False,
@@ -1111,265 +1306,108 @@ def record_wrong_answer_api(request):
 @require_http_methods(["POST"])
 def submit_completed_game_api(request):
     """
-    Submit a completed game from UI with full game data
+    Submit a completed game from UI with simplified player-centric workflow
     POST payload: {
         "match_id": "uuid-string",
-        "game_data": {
-            "participant_count": 2,
-            "winning_team": 1,
-            "cards_chosen": ["S3", "HJ"],
-            "game_duration": 300,  # seconds
-            "created_at": "2025-08-23T10:00:00Z",
-            "completed_at": "2025-08-23T10:05:00Z"
-        },
-        "players": [
-            {
-                "player_id": 1,  # Required for sync
-                "username": "alice",
-                "player_name": "Alice",
-                "team": 1,
-                "marks_earned": 1,
-                "is_winner": true,
-                "lost_card": null,
-                "question_answered": false,
-                "answer_correct": false
-            },
-            {
-                "player_id": 2,  # Required for sync
-                "username": "bob", 
-                "player_name": "Bob",
-                "team": 2,
-                "marks_earned": 0,
-                "is_winner": false,
-                "lost_card": "S3",
-                "question_answered": false,
-                "answer_correct": false
-            }
-        ],
-        "responses": [
-            {
-                "player_id": 1,
-                "response_type": "fun_fact",
-                "fun_fact_text": "Did you know that spades represent challenges?",
-                "card": "S3"
-            },
-            {
-                "player_id": 2,
-                "response_type": "question",
-                "question_id": 123,
-                "card": "S3"
-            }
-        ]
+        "player_id": 1,
+        "username": "alice",
+        "team": 1,
+        "is_winner": true,
+        "lost_card": null  # Only for losers
     }
+    
+    Post-game logic:
+    - Winners: Automatically get 1 mark and receive explanation (fun fact) from question model
+    - Losers: Get full question object, frontend validates answer, then calls award-points endpoint
+    - No more "question_answered" or "answer_correct" fields needed for winners
     """
     try:
         data = json.loads(request.body)
         match_id = data.get('match_id')
-        game_data = data.get('game_data', {})
-        players_data = data.get('players', [])
-        responses_data = data.get('responses', [])
+        player_id = data.get('player_id')
+        username = data.get('username')
+        is_winner = data.get('is_winner')
+        team = data.get('team')
+        lost_card = data.get('lost_card')
         
         # Validate required fields
-        if not match_id:
+        required_fields = ['match_id', 'player_id', 'username', 'team', 'is_winner']
+        missing_fields = [field for field in required_fields if data.get(field) is None]
+        if missing_fields:
             return JsonResponse({
                 'success': False,
-                'error': 'match_id is required'
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
             }, status=400)
             
-        if not game_data or not players_data:
-            return JsonResponse({
-                'success': False,
-                'error': 'game_data and players are required'
-            }, status=400)
-            
-        required_game_fields = ['participant_count', 'winning_team', 'cards_chosen']
-        missing_game_fields = [field for field in required_game_fields if field not in game_data]
-        if missing_game_fields:
-            return JsonResponse({
-                'success': False,
-                'error': f'Missing game_data fields: {", ".join(missing_game_fields)}'
-            }, status=400)
-            
-        # Validate player data
-        for player_data in players_data:
-            required_player_fields = ['player_id', 'username', 'team', 'is_winner']
-            missing_player_fields = [field for field in required_player_fields if field not in player_data]
-            if missing_player_fields:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Missing player fields: {", ".join(missing_player_fields)} for player data'
-                }, status=400)
-        
-        # Validate cards if provided
-        cards_chosen = game_data.get('cards_chosen', [])
-        if cards_chosen:
+        # Validate lost_card if provided
+        if lost_card:
             valid_cards = [choice[0] for choice in Question.CARD_CHOICES]
-            invalid_cards = [card for card in cards_chosen if card not in valid_cards]
-            if invalid_cards:
+            if lost_card not in valid_cards:
                 return JsonResponse({
                     'success': False,
-                    'error': f'Invalid cards: {", ".join(invalid_cards)}. Valid cards are: {", ".join(valid_cards)}'
+                    'error': f'Invalid lost_card: {lost_card}. Valid cards are: {", ".join(valid_cards)}'
                 }, status=400)
-        
+
         with transaction.atomic():
-            # Check if game already exists
+            # Get the game
             try:
-                existing_game = Game.objects.get(match_id=match_id)
+                game = Game.objects.get(match_id=match_id)
+            except Game.DoesNotExist:
                 return JsonResponse({
                     'success': False,
-                    'error': f'Game with match_id {match_id} already exists'
-                }, status=400)
-            except Game.DoesNotExist:
-                pass  # Good, game doesn't exist yet
+                    'error': f'Game with match_id {match_id} not found'
+                }, status=404)
             
-            # Create the game
-            game = Game.objects.create(
-                match_id=match_id,
-                participant_count=game_data['participant_count'],
-                team_count=2 if game_data['participant_count'] > 1 else 1,
-                status='completed',
-                winning_team=game_data['winning_team'],
-                cards_chosen=cards_chosen,
-                created_at=timezone.now() if not game_data.get('created_at') else game_data['created_at'],
-                completed_at=timezone.now() if not game_data.get('completed_at') else game_data['completed_at']
-            )
-            
-            # Create/Update players and participants
-            participants = []
-            team1_marks = 0
-            team2_marks = 0
-            
-            for player_data in players_data:
-                # Get or create player using player_id for sync
-                try:
-                    player = Player.objects.get(id=player_data['player_id'])
-                    # Update player info if needed
-                    if player.username != player_data['username']:
-                        player.username = player_data['username']
-                    if player.player_name != player_data.get('player_name', player_data['username']):
-                        player.player_name = player_data.get('player_name', player_data['username'])
+            # Get the player
+            try:
+                player = Player.objects.get(id=player_id)
+                # Update username if provided
+                if player.username != username:
+                    player.username = username
                     player.save()
-                except Player.DoesNotExist:
-                    return JsonResponse({
-                        'success': False,
-                        'error': f'Player with ID {player_data["player_id"]} not found. Please create player first.'
-                    }, status=400)
-                
-                # Create game participant
-                participant = GameParticipant.objects.create(
-                    game=game,
-                    player=player,
-                    team=player_data['team'],
-                    is_winner=player_data['is_winner'],
-                    marks_earned=player_data.get('marks_earned', 1 if player_data['is_winner'] else 0),
-                    lost_card=player_data.get('lost_card'),
-                    question_answered=player_data.get('question_answered', False),
-                    answer_correct=player_data.get('answer_correct', False)
-                )
-                participants.append(participant)
-                
-                # Count marks for teams
-                if participant.team == 1:
-                    team1_marks += participant.marks_earned
-                else:
-                    team2_marks += participant.marks_earned
-                
-                # Update player's game statistics
-                player.update_game_stats(
-                    won=player_data['is_winner'],
-                    marks_earned=player_data.get('marks_earned', 1 if player_data['is_winner'] else 0),
-                    questions_answered=1 if player_data.get('question_answered', False) else 0,
-                    correct_answers=1 if player_data.get('answer_correct', False) else 0
-                )
+            except Player.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Player with ID {player_id} not found'
+                }, status=400)
             
-            # Create game result
-            game_result = GameResult.objects.create(
+            # Check if player already submitted for this game
+            existing_participant = GameParticipant.objects.filter(game=game, player=player).first()
+            if existing_participant:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Player {username} has already submitted result for this game'
+                }, status=400)
+            
+            # Create game participant using helper function
+            participant = create_game_participant(
                 game=game,
-                team1_marks=team1_marks,
-                team2_marks=team2_marks,
-                result_summary={
-                    'winning_team': game_data['winning_team'],
-                    'cards_chosen': cards_chosen,
-                    'completed_at': game.completed_at.isoformat() if game.completed_at else timezone.now().isoformat(),
-                    'game_duration': game_data.get('game_duration', 0)
-                }
+                player=player,
+                team=team,
+                is_winner=is_winner,
+                lost_card=lost_card
             )
             
-            # Create game responses
-            for response_data in responses_data:
-                # Find the participant by player_id
-                participant = None
-                for p in participants:
-                    if p.player.id == response_data['player_id']:
-                        participant = p
-                        break
-                
-                if not participant:
-                    continue  # Skip if participant not found
-                
-                # Create response based on type
-                game_response = GameResponse.objects.create(
-                    game=game,
-                    participant=participant,
-                    response_type=response_data['response_type']
-                )
-                
-                if response_data['response_type'] == 'fun_fact':
-                    game_response.fun_fact_text = response_data.get('fun_fact_text', 'Congratulations!')
-                    game_response.save()
-                    
-                elif response_data['response_type'] == 'question':
-                    question_id = response_data.get('question_id')
-                    if question_id:
-                        try:
-                            question = Question.objects.get(id=question_id)
-                            game_response.question = question
-                            game_response.save()
-                            
-                            # Note: Question model doesn't have total_attempts field
-                            # Question usage tracking can be added later if needed
-                            
-                        except Question.DoesNotExist:
-                            pass  # Question not found, skip
+            # Generate appropriate response using helper function
+            response_data = generate_post_game_response(participant, lost_card)
             
-            # Prepare response data
-            participants_data = []
-            for participant in participants:
-                participants_data.append({
-                    'player_id': participant.player.id,
-                    'username': participant.player.username,
-                    'player_name': participant.player.player_name,
-                    'team': participant.team,
-                    'is_winner': participant.is_winner,
-                    'marks_earned': participant.marks_earned,
-                    'lost_card': participant.lost_card,
-                    'question_answered': participant.question_answered,
-                    'answer_correct': participant.answer_correct
-                })
+            # Check if all participants have submitted and finalize game
+            game_status = finalize_game_if_complete(game)
             
             return JsonResponse({
                 'success': True,
-                'game': {
-                    'match_id': str(game.match_id),
-                    'status': game.status,
-                    'participant_count': game.participant_count,
-                    'team_count': game.team_count,
-                    'winning_team': game.winning_team,
-                    'cards_chosen': game.cards_chosen,
-                    'created_at': game.created_at.isoformat() if game.created_at else None,
-                    'completed_at': game.completed_at.isoformat() if game.completed_at else None,
-                    'participants': participants_data,
-                    'result': {
-                        'team1_marks': team1_marks,
-                        'team2_marks': team2_marks,
-                        'result_summary': game_result.result_summary
-                    }
+                'message': 'Game result submitted successfully',
+                'player': {
+                    'player_id': player.id,
+                    'username': player.username,
+                    'team': participant.team,
+                    'is_winner': participant.is_winner,
+                    'marks_earned': participant.marks_earned
                 },
-                'sync_status': {
-                    'players_updated': len(players_data),
-                    'participants_created': len(participants),
-                    'responses_created': len(responses_data),
-                    'questions_linked': len([r for r in responses_data if r.get('question_id')])
+                'response': response_data,
+                'game_status': {
+                    'match_id': str(game.match_id),
+                    **game_status
                 }
             })
             
@@ -1916,65 +1954,20 @@ def submit_player_result_api(request):
             }, status=400)
         
         with transaction.atomic():
-            # Create game participant
-            participant = GameParticipant.objects.create(
+            # Create game participant using helper function
+            participant = create_game_participant(
                 game=game,
                 player=player,
                 team=data['team'],
                 is_winner=data['is_winner'],
-                marks_earned=data.get('marks_earned', 1 if data['is_winner'] else 0),
-                lost_card=data.get('lost_card'),
-                question_answered=data.get('question_answered', False),
-                answer_correct=data.get('answer_correct', False)
+                lost_card=data.get('lost_card')
             )
             
-            # Update player's game statistics
-            player.update_game_stats(
-                won=data['is_winner'],
-                marks_earned=data.get('marks_earned', 1 if data['is_winner'] else 0),
-                questions_answered=1 if data.get('question_answered', False) else 0,
-                correct_answers=1 if data.get('answer_correct', False) else 0
-            )
+            # Generate appropriate response using helper function
+            response_data = generate_post_game_response(participant, data.get('lost_card'))
             
-            # Check if all participants have submitted
-            participants_submitted = game.participants.count()
-            participants_expected = game.participant_count
-            
-            # Update game status if all players submitted
-            if participants_submitted >= participants_expected:
-                game.status = 'completed'
-                game.completed_at = timezone.now()
-                
-                # Determine winning team based on submitted results
-                team1_count = game.participants.filter(team=1, is_winner=True).count()
-                team2_count = game.participants.filter(team=2, is_winner=True).count()
-                
-                if team1_count > team2_count:
-                    game.winning_team = 1
-                elif team2_count > team1_count:
-                    game.winning_team = 2
-                # If tie, leave winning_team as None
-                
-                game.save()
-                
-                # Create game result if game is completed
-                team1_marks = game.participants.filter(team=1).aggregate(
-                    total=Sum('marks_earned'))['total'] or 0
-                team2_marks = game.participants.filter(team=2).aggregate(
-                    total=Sum('marks_earned'))['total'] or 0
-                
-                GameResult.objects.get_or_create(
-                    game=game,
-                    defaults={
-                        'team1_marks': team1_marks,
-                        'team2_marks': team2_marks,
-                        'result_summary': {
-                            'winning_team': game.winning_team,
-                            'completed_at': game.completed_at.isoformat() if game.completed_at else None,
-                            'participants_count': participants_submitted
-                        }
-                    }
-                )
+            # Check if all participants have submitted and finalize game
+            game_status = finalize_game_if_complete(game)
             
             return JsonResponse({
                 'success': True,
@@ -1987,11 +1980,10 @@ def submit_player_result_api(request):
                     'is_winner': participant.is_winner,
                     'marks_earned': participant.marks_earned
                 },
+                'response': response_data,
                 'game_status': {
                     'match_id': str(game.match_id),
-                    'participants_submitted': participants_submitted,
-                    'participants_expected': participants_expected,
-                    'status': game.status
+                    **game_status
                 }
             })
     
