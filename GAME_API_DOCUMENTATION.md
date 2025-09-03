@@ -4,20 +4,19 @@ This document describes the Game MVC system that allows players to participate i
 
 ## Game Flow Overview
 
-1. **Create Game**: Create a new game session with 1, 2, 4, or 6 participants
-2. **Complete Game**: Mark the game as completed with winning team and cards chosen by losing team
-3. **Submit Completed Game**: Submit complete game data from UI with full synchronization
-4. **Get Responses**: Winners get fun facts from chosen cards, losers get questions from their assigned cards
-5. **UI Answer Validation**: Game UI validates answers using question data and awards points accordingly
-6. **Check Status**: Monitor game progress and results
+1. **Create Game**: Frontend creates a game session with only participant count and receives a match_id
+2. **Distribute Match ID**: Frontend distributes the match_id to all players  
+3. **Individual Player Submission**: Each player submits their win/loss result using the same match_id
+4. **Get Player Response**: Each player gets their specific response (winners get fun facts, losers get questions)
+5. **Submit Answers**: Losing players submit answers to their questions
+6. **Award Points**: Points are awarded for correct answers and statistics are updated
 
 **Important Game Logic:**
-- **Team assignments are based on initial team setup** provided during game creation
-- **Losing team members receive questions** from chosen cards and must answer them
-- **Winning team members receive fun facts/explanations** from the same cards  
-- **Cards are chosen during gameplay** and determine content for both teams
-- **UI handles answer validation** using question data that includes correct answers and points
-- **Points are awarded** only for correct answers via dedicated endpoints
+- **Game creation is simplified** - only participant count is needed initially
+- **Players submit individually** - each player reports their own win/loss status using the shared match_id
+- **Team assignments are determined** during individual player submissions (team 1 = winners, team 2 = losers)
+- **Response assignment is automatic** - winners automatically get fun facts, losers get questions based on their submission
+- **Match completion** - game is completed when all expected players have submitted their results
 
 ## UI-Driven Answer Validation Workflow
 
@@ -56,80 +55,20 @@ All endpoints are **unauthenticated** and use JSON for request/response.
 POST /api/games/create/
 ```
 
+**Description**: Create a new game session by specifying only the participant count. The server generates a unique match_id that will be distributed to all players in the frontend.
+
 **Request Body:**
-
-For **single player** (no teams):
 ```json
 {
-    "participant_count": 1,
-    "players": [
-        {
-            "player_id": 1
-        }
-    ]
+    "participant_count": 4
 }
 ```
-
-For **multiplayer** (with team assignments):
-```json
-{
-    "participant_count": 4,
-    "players": [
-        {
-            "player_id": 1,
-            "team": 1
-        },
-        {
-            "player_id": 2,
-            "team": 1
-        },
-        {
-            "player_id": 3,
-            "team": 2
-        },
-        {
-            "player_id": 4,
-            "team": 2
-        }
-    ]
-}
-```
-
-**Note**: 
-- Players must exist in the database before creating a game
-- For single player games (`participant_count: 1`), no team assignment is needed
-- For multiplayer games, each player must be assigned to a team (1 or 2)
-- Team assignments are provided by the client, not automatically split
 
 **Valid participant counts:** 1, 2, 4, 6
 - 1 participant = Player vs Computer (no teams)
-- 2+ participants = 2 teams (team assignments provided in request)
+- 2+ participants = 2 teams (players will be assigned teams when they submit results)
 
 **Response:**
-
-For **single player**:
-```json
-{
-    "success": true,
-    "game": {
-        "match_id": "550e8400-e29b-41d4-a716-446655440000",
-        "participant_count": 1,
-        "team_count": 1,
-        "players_per_team": 1,
-        "status": "active",
-        "participants": [
-            {
-                "player_id": 1,
-                "username": "player1", 
-                "player_name": "Alice",
-                "team": 1
-            }
-        ]
-    }
-}
-```
-
-For **multiplayer**:
 ```json
 {
     "success": true,
@@ -137,37 +76,13 @@ For **multiplayer**:
         "match_id": "550e8400-e29b-41d4-a716-446655440000",
         "participant_count": 4,
         "team_count": 2,
-        "players_per_team": 2,
-        "status": "active",
-        "participants": [
-            {
-                "player_id": 1,
-                "username": "player1", 
-                "player_name": "Alice", 
-                "team": 1
-            },
-            {
-                "player_id": 2,
-                "username": "player2", 
-                "player_name": "Bob", 
-                "team": 1
-            },
-            {
-                "player_id": 3,
-                "username": "player3", 
-                "player_name": "Charlie", 
-                "team": 2
-            },
-            {
-                "player_id": 4,
-                "username": "player4", 
-                "player_name": "Diana", 
-                "team": 2
-            }
-        ]
+        "status": "waiting",
+        "created_at": "2025-09-03T10:00:00Z"
     }
 }
 ```
+
+**Note**: The match_id should be distributed to all players in the frontend. Each player will use this same match_id to submit their individual results.
 
 ### 2. Complete Game (Legacy)
 ```
@@ -208,63 +123,42 @@ POST /api/games/complete/
 }
 ```
 
-### 2a. Submit Completed Game (New - UI Workflow)
+### 2. Submit Player Result
 ```
 POST /api/games/submit-completed/
 ```
 
-**Description**: Submit a complete game from the UI with full game data including player IDs for proper synchronization across all models.
+**Description**: Each player individually submits their game result using the shared match_id. Players submit whether they won or lost, along with their player information.
 
-**Request Body:**
+**Request Body for Winner:**
 ```json
 {
     "match_id": "550e8400-e29b-41d4-a716-446655440000",
-    "game_data": {
-        "participant_count": 2,
-        "winning_team": 1,
-        "cards_chosen": ["S3", "HJ"],
-        "game_duration": 300,
-        "created_at": "2025-08-23T10:00:00Z",
-        "completed_at": "2025-08-23T10:05:00Z"
-    },
-    "players": [
-        {
-            "player_id": 1,
-            "username": "alice",
-            "player_name": "Alice",
-            "team": 1,
-            "marks_earned": 1,
-            "is_winner": true,
-            "lost_card": null,
-            "question_answered": false,
-            "answer_correct": false
-        },
-        {
-            "player_id": 2,
-            "username": "bob", 
-            "player_name": "Bob",
-            "team": 2,
-            "marks_earned": 0,
-            "is_winner": false,
-            "lost_card": "S3",
-            "question_answered": false,
-            "answer_correct": false
-        }
-    ],
-    "responses": [
-        {
-            "player_id": 1,
-            "response_type": "fun_fact",
-            "fun_fact_text": "Did you know that spades represent challenges?",
-            "card": "S3"
-        },
-        {
-            "player_id": 2,
-            "response_type": "question",
-            "question_id": 123,
-            "card": "S3"
-        }
-    ]
+    "player_id": 1,
+    "username": "alice",
+    "player_name": "Alice",
+    "team": 1,
+    "marks_earned": 1,
+    "is_winner": true,
+    "lost_card": null,
+    "question_answered": false,
+    "answer_correct": false
+}
+```
+
+**Request Body for Loser:**
+```json
+{
+    "match_id": "550e8400-e29b-41d4-a716-446655440000",
+    "player_id": 2,
+    "username": "bob", 
+    "player_name": "Bob",
+    "team": 2,
+    "marks_earned": 0,
+    "is_winner": false,
+    "lost_card": "S3",
+    "question_answered": false,
+    "answer_correct": false
 }
 ```
 
@@ -272,130 +166,112 @@ POST /api/games/submit-completed/
 ```json
 {
     "success": true,
-    "game": {
-        "match_id": "550e8400-e29b-41d4-a716-446655440000",
-        "status": "completed",
-        "participant_count": 2,
-        "team_count": 2,
-        "winning_team": 1,
-        "cards_chosen": ["S3", "HJ"],
-        "created_at": "2025-08-23T10:00:00Z",
-        "completed_at": "2025-08-23T10:05:00Z",
-        "participants": [
-            {
-                "player_id": 1,
-                "username": "alice",
-                "player_name": "Alice",
-                "team": 1,
-                "is_winner": true,
-                "marks_earned": 1,
-                "lost_card": null,
-                "question_answered": false,
-                "answer_correct": false
-            },
-            {
-                "player_id": 2,
-                "username": "bob",
-                "player_name": "Bob",
-                "team": 2,
-                "is_winner": false,
-                "marks_earned": 0,
-                "lost_card": "S3",
-                "question_answered": false,
-                "answer_correct": false
-            }
-        ],
-        "result": {
-            "team1_marks": 1,
-            "team2_marks": 0,
-            "result_summary": {
-                "winning_team": 1,
-                "cards_chosen": ["S3", "HJ"],
-                "completed_at": "2025-08-23T10:05:00Z",
-                "game_duration": 300
-            }
-        }
+    "message": "Player result submitted successfully",
+    "player": {
+        "player_id": 1,
+        "username": "alice",
+        "team": 1,
+        "is_winner": true,
+        "marks_earned": 1
     },
-    "sync_status": {
-        "players_updated": 2,
-        "participants_created": 2,
-        "responses_created": 2,
-        "questions_updated": 1
+    "game_status": {
+        "match_id": "550e8400-e29b-41d4-a716-446655440000",
+        "participants_submitted": 2,
+        "participants_expected": 4,
+        "status": "in_progress"
     }
 }
 ```
 
-### 3. Get Game Responses
+**Note**: 
+- Each player submits their individual result using the same match_id
+- The game status will show how many players have submitted vs expected
+- Once all players submit, the game status becomes "completed"
+
+### 3. Get Player-Specific Game Responses
 ```
-GET /api/games/{match_id}/responses/
+GET /api/games/{match_id}/responses/?player_id={player_id}
 ```
 
-Returns different responses for winners and losers:
+**Description**: Each player gets their specific response based on their win/loss status from the shared match_id. Winners get fun facts, losers get questions to answer.
 
-**Response:**
+**Example Request:**
+```
+GET /api/games/550e8400-e29b-41d4-a716-446655440000/responses/?player_id=1
+```
+
+**Response for Winner:**
 ```json
 {
     "success": true,
-    "game": {
-        "match_id": "550e8400-e29b-41d4-a716-446655440000",
-        "status": "completed",
-        "winning_team": 1
+    "player": {
+        "player_id": 1,
+        "username": "alice",
+        "player_name": "Alice",
+        "team": 1,
+        "is_winner": true
     },
-    "responses": [
-        {
-            "username": "player1",
-            "player_name": "Alice",
-            "team": 1,
-            "is_winner": true,
-            "response_type": "fun_fact",
-            "fun_fact": "Did you know that the heart suit represents emotions and love?",
-            "card": "HJ",
-            "card_info": {
-                "suit": "Hearts",
-                "value": "J",
-                "pointValue": 3,
-                "symbol": "♥"
-            }
-        },
-        {
-            "username": "player2",
-            "player_name": "Bob",
-            "team": 2,
-            "is_winner": false,
-            "response_type": "question",
-            "card": "S3",
-            "card_info": {
-                "suit": "Spades",
-                "value": "3",
-                "pointValue": 0,
-                "symbol": "♠"
-            },
-            "question": {
-                "id": 123,
-                "language": "kinyarwanda",
-                "question_text": "What suit is associated with conflict?",
-                "question_type": "multiple_choice",
-                "options": ["Hearts", "Spades", "Clubs", "Diamonds"],
-                "difficulty": "easy",
-                "points": 1
-            }
+    "response": {
+        "response_type": "fun_fact",
+        "fun_fact": "Did you know that the heart suit represents emotions and love?",
+        "card": "HJ",
+        "card_info": {
+            "suit": "Hearts",
+            "value": "J",
+            "pointValue": 3,
+            "symbol": "♥"
         }
-    ]
+    }
 }
 ```
 
-### 4. Submit Answer (Legacy - Use Award Points Instead)
+**Response for Loser:**
+```json
+{
+    "success": true,
+    "player": {
+        "player_id": 2,
+        "username": "bob",
+        "player_name": "Bob",
+        "team": 2,
+        "is_winner": false
+    },
+    "response": {
+        "response_type": "question",
+        "card": "S3",
+        "card_info": {
+            "suit": "Spades",
+            "value": "3",
+            "pointValue": 0,
+            "symbol": "♠"
+        },
+        "question": {
+            "id": 123,
+            "language": "kinyarwanda",
+            "question_text": "What suit is associated with conflict?",
+            "question_type": "multiple_choice",
+            "options": ["Hearts", "Spades", "Clubs", "Diamonds"],
+            "correct_answer": "Spades",
+            "difficulty": "easy",
+            "points": 1
+        }
+    }
+}
+```
+
+### 4. Submit Answer
 ```
 POST /api/games/submit-answer/
 ```
 
-**Note**: This endpoint is maintained for backward compatibility. For new implementations, use the Award Points workflow below.
+**Description**: Losing players submit their answers to the questions they received. This is the traditional endpoint that validates answers server-side.
 
 **Request Body:**
 ```json
 {
     "match_id": "550e8400-e29b-41d4-a716-446655440000",
-    "username": "player2",
+    "player_id": 2,
+    "username": "bob",
     "answer": "Spades"
 }
 ```
@@ -408,7 +284,13 @@ POST /api/games/submit-answer/
         "is_correct": true,
         "correct_answer": "Spades",
         "explanation": "Spades represent conflict and challenges in card symbolism.",
-        "points_earned": 1
+        "points_earned": 1,
+        "player": {
+            "username": "bob",
+            "total_correct_answers": 15,
+            "total_questions_answered": 20,
+            "answer_accuracy": 75.0
+        }
     }
 }
 ```
@@ -743,76 +625,92 @@ The system automatically tracks comprehensive statistics for each player:
 
 ## Example Game Flow
 
-### Option 1: Submit Complete Game (Recommended for UI)
+### Player-Centric Game Workflow (Recommended)
 
-1. **UI submits complete game data:**
+1. **Frontend creates a game with participant count:**
+```bash
+curl -X POST http://localhost:8000/api/games/create/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "participant_count": 4
+  }'
+```
+
+Response contains match_id: `550e8400-e29b-41d4-a716-446655440000`
+
+2. **Frontend distributes match_id to all players**
+
+3. **Each player submits their individual result:**
+
+**Alice (Winner) submits:**
 ```bash
 curl -X POST http://localhost:8000/api/games/submit-completed/ \
   -H "Content-Type: application/json" \
   -d '{
     "match_id": "550e8400-e29b-41d4-a716-446655440000",
-    "game_data": {
-      "participant_count": 2,
-      "winning_team": 1,
-      "cards_chosen": ["HJ", "S3"],
-      "game_duration": 300
-    },
-    "players": [
-      {
-        "player_id": 1,
-        "username": "alice",
-        "player_name": "Alice", 
-        "team": 1,
-        "is_winner": true,
-        "marks_earned": 1
-      },
-      {
-        "player_id": 2,
-        "username": "bob",
-        "player_name": "Bob",
-        "team": 2, 
-        "is_winner": false,
-        "marks_earned": 0,
-        "lost_card": "S3"
-      }
-    ],
-    "responses": [
-      {
-        "player_id": 1,
-        "response_type": "fun_fact",
-        "fun_fact_text": "Did you know that hearts represent emotions?",
-        "card": "HJ"
-      },
-      {
-        "player_id": 2,
-        "response_type": "question",
-        "question_id": 1,
-        "card": "S3"
-      }
-    ]
+    "player_id": 1,
+    "username": "alice",
+    "player_name": "Alice",
+    "team": 1,
+    "marks_earned": 1,
+    "is_winner": true,
+    "lost_card": null,
+    "question_answered": false,
+    "answer_correct": false
   }'
 ```
 
-2. **Get responses (if needed):**
+**Bob (Loser) submits:**
 ```bash
-curl http://localhost:8000/api/games/550e8400-e29b-41d4-a716-446655440000/responses/
-```
-
-3. **Bob's UI validates his answer and awards points:**
-```bash
-# If answer is correct:
-curl -X POST http://localhost:8000/api/games/award-points/ \
+curl -X POST http://localhost:8000/api/games/submit-completed/ \
   -H "Content-Type: application/json" \
   -d '{
     "match_id": "550e8400-e29b-41d4-a716-446655440000",
+    "player_id": 2,
     "username": "bob",
-    "question_id": 1,
-    "answer": "Kigali",
-    "points": 1
+    "player_name": "Bob",
+    "team": 2,
+    "marks_earned": 0,
+    "is_winner": false,
+    "lost_card": "S3",
+    "question_answered": false,
+    "answer_correct": false
   }'
 ```
 
-### Option 2: Legacy Step-by-Step Workflow
+4. **Each player gets their specific response:**
+
+**Alice gets fun fact:**
+```bash
+curl "http://localhost:8000/api/games/550e8400-e29b-41d4-a716-446655440000/responses/?player_id=1"
+```
+
+**Bob gets question:**
+```bash
+curl "http://localhost:8000/api/games/550e8400-e29b-41d4-a716-446655440000/responses/?player_id=2"
+```
+
+5. **Losing players submit answers:**
+```bash
+curl -X POST http://localhost:8000/api/games/submit-answer/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "match_id": "550e8400-e29b-41d4-a716-446655440000",
+    "player_id": 2,
+    "username": "bob",
+    "answer": "Spades"
+  }'
+```
+
+6. **Continue with UI Answer Validation Workflow (Optional):**
+
+For more advanced UI interactions, losing players can also use:
+- `/api/games/award-points/` for correct answers
+- `/api/games/record-wrong-answer/` for incorrect answers
+
+### Legacy Complete Game Workflow
+
+For backward compatibility, the system still supports submitting complete game data all at once:
 
 1. **Create a 2-player game:**
 ```bash

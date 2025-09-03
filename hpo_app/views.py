@@ -7,6 +7,7 @@ import json
 import random
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import Sum
 
 # Create your views here.
 
@@ -268,19 +269,16 @@ def create_game_api(request):
     """
     Create a new game session
     POST payload: {
-        "participant_count": 2,  # 1, 2, 4, or 6
-        "players": [  # Array of player objects with IDs and optional teams
-            {"player_id": 1, "team": 1},  # New format with team assignment
-            {"player_id": 2, "team": 2}
-        ]
-        # OR
-        "players": [1, 2]  # Legacy format - simple array of player IDs
+        "participant_count": 2  # 1, 2, 4, or 6
     }
+    
+    NOTE: This endpoint now supports the new player-centric workflow.
+    It creates a game with just the participant count and returns a match_id.
+    Players will submit their own results individually using the match_id.
     """
     try:
         data = json.loads(request.body)
         participant_count = data.get('participant_count')
-        players_data = data.get('players', [])
         
         # Validate participant count
         valid_counts = [1, 2, 4, 6]
@@ -290,106 +288,24 @@ def create_game_api(request):
                 'error': f'Invalid participant count. Must be one of: {valid_counts}'
             }, status=400)
         
-        # Validate players array
-        if len(players_data) != participant_count:
-            return JsonResponse({
-                'success': False,
-                'error': f'Number of players ({len(players_data)}) must match participant count ({participant_count})'
-            }, status=400)
+        # Create the game with just participant count
+        # Players will be added when they submit their results
+        game = Game.objects.create(
+            participant_count=participant_count,
+            team_count=2 if participant_count > 1 else 1,
+            status='waiting'
+        )
         
-        # Parse player data - support both old format (just IDs) and new format (with teams)
-        players_info = []
-        for i, player_data in enumerate(players_data):
-            if isinstance(player_data, dict):
-                # New format: {"player_id": 1, "team": 1}
-                try:
-                    player_id = int(player_data.get('player_id'))
-                    team = player_data.get('team')
-                    if team is not None:
-                        team = int(team)
-                    players_info.append({'player_id': player_id, 'team': team})
-                except (ValueError, TypeError):
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'All player IDs and teams must be valid integers'
-                    }, status=400)
-            else:
-                # Legacy format: just player ID
-                try:
-                    player_id = int(player_data)
-                    players_info.append({'player_id': player_id, 'team': None})
-                except (ValueError, TypeError):
-                    return JsonResponse({
-                        'success': False,
-                        'error': 'All player IDs must be valid integers'
-                    }, status=400)
-        
-        with transaction.atomic():
-            # Create the game
-            game = Game.objects.create(
-                participant_count=participant_count,
-                status='waiting'
-            )
-            
-            # Add players to the game
-            for i, player_info in enumerate(players_info):
-                player_id = player_info['player_id']
-                client_team = player_info['team']
-                
-                try:
-                    player = Player.objects.get(id=player_id)
-                except Player.DoesNotExist:
-                    return JsonResponse({
-                        'success': False,
-                        'error': f'Player with ID {player_id} not found'
-                    }, status=400)
-                
-                # Determine team assignment
-                if participant_count == 1:
-                    # Single player games always use team 1
-                    team = 1
-                elif client_team is not None:
-                    # Use client-provided team assignment
-                    if client_team not in [1, 2]:
-                        return JsonResponse({
-                            'success': False,
-                            'error': f'Team assignment must be 1 or 2, got {client_team}'
-                        }, status=400)
-                    team = client_team
-                else:
-                    # Legacy mode: auto-assign teams (split evenly)
-                    team = 1 if i < participant_count // 2 else 2
-                
-                # Create game participant
-                GameParticipant.objects.create(
-                    game=game,
-                    player=player,
-                    team=team
-                )
-            
-            # Set game status to active
-            game.status = 'active'
-            game.save()
-            
-            return JsonResponse({
-                'success': True,
-                'game': {
-                    'match_id': str(game.match_id),
-                    'participant_count': game.participant_count,
-                    'team_count': game.team_count,
-                    'players_per_team': game.players_per_team,
-                    'status': game.status,
-                    'participants': [
-                        {
-                            'player_id': p.player.id,
-                            'username': p.player.username,
-                            'player_name': p.player.player_name,
-                            'team': p.team
-                        }
-                        for p in game.participants.all()
-                    ]
-                }
-            })
+        return JsonResponse({
+            'success': True,
+            'game': {
+                'match_id': str(game.match_id),
+                'participant_count': game.participant_count,
+                'team_count': game.team_count,
+                'status': game.status,
+                'created_at': game.created_at.isoformat() if game.created_at else None
+            }
+        })
     
     except Exception as e:
         return JsonResponse({
@@ -1924,6 +1840,161 @@ def increment_content_usage_api(request):
             'success': False,
             'error': 'Invalid JSON format'
         }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def submit_player_result_api(request):
+    """
+    Submit individual player result for a game
+    POST payload: {
+        "match_id": "uuid-string",
+        "player_id": 1,
+        "username": "alice",
+        "player_name": "Alice", 
+        "team": 1,
+        "marks_earned": 1,
+        "is_winner": true,
+        "lost_card": null,
+        "question_answered": false,
+        "answer_correct": false
+    }
+    
+    This endpoint supports the new player-centric workflow where each player
+    individually submits their game result using the shared match_id.
+    """
+    try:
+        data = json.loads(request.body)
+        match_id = data.get('match_id')
+        player_id = data.get('player_id')
+        username = data.get('username')
+        
+        # Validate required fields
+        required_fields = ['match_id', 'player_id', 'username', 'team', 'is_winner']
+        missing_fields = [field for field in required_fields if data.get(field) is None]
+        if missing_fields:
+            return JsonResponse({
+                'success': False,
+                'error': f'Missing required fields: {", ".join(missing_fields)}'
+            }, status=400)
+        
+        # Get or create the game
+        try:
+            game = Game.objects.get(match_id=match_id)
+        except Game.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'Game with match_id {match_id} not found'
+            }, status=404)
+        
+        # Get or create the player
+        try:
+            player = Player.objects.get(id=player_id)
+            # Update player info if provided
+            if player.username != username:
+                player.username = username
+            if data.get('player_name') and player.player_name != data['player_name']:
+                player.player_name = data['player_name']
+            player.save()
+        except Player.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': f'Player with ID {player_id} not found'
+            }, status=400)
+        
+        # Check if player already submitted for this game
+        existing_participant = GameParticipant.objects.filter(game=game, player=player).first()
+        if existing_participant:
+            return JsonResponse({
+                'success': False,
+                'error': f'Player {username} has already submitted result for this game'
+            }, status=400)
+        
+        with transaction.atomic():
+            # Create game participant
+            participant = GameParticipant.objects.create(
+                game=game,
+                player=player,
+                team=data['team'],
+                is_winner=data['is_winner'],
+                marks_earned=data.get('marks_earned', 1 if data['is_winner'] else 0),
+                lost_card=data.get('lost_card'),
+                question_answered=data.get('question_answered', False),
+                answer_correct=data.get('answer_correct', False)
+            )
+            
+            # Update player's game statistics
+            player.update_game_stats(
+                won=data['is_winner'],
+                marks_earned=data.get('marks_earned', 1 if data['is_winner'] else 0),
+                questions_answered=1 if data.get('question_answered', False) else 0,
+                correct_answers=1 if data.get('answer_correct', False) else 0
+            )
+            
+            # Check if all participants have submitted
+            participants_submitted = game.participants.count()
+            participants_expected = game.participant_count
+            
+            # Update game status if all players submitted
+            if participants_submitted >= participants_expected:
+                game.status = 'completed'
+                game.completed_at = timezone.now()
+                
+                # Determine winning team based on submitted results
+                team1_count = game.participants.filter(team=1, is_winner=True).count()
+                team2_count = game.participants.filter(team=2, is_winner=True).count()
+                
+                if team1_count > team2_count:
+                    game.winning_team = 1
+                elif team2_count > team1_count:
+                    game.winning_team = 2
+                # If tie, leave winning_team as None
+                
+                game.save()
+                
+                # Create game result if game is completed
+                team1_marks = game.participants.filter(team=1).aggregate(
+                    total=Sum('marks_earned'))['total'] or 0
+                team2_marks = game.participants.filter(team=2).aggregate(
+                    total=Sum('marks_earned'))['total'] or 0
+                
+                GameResult.objects.get_or_create(
+                    game=game,
+                    defaults={
+                        'team1_marks': team1_marks,
+                        'team2_marks': team2_marks,
+                        'result_summary': {
+                            'winning_team': game.winning_team,
+                            'completed_at': game.completed_at.isoformat() if game.completed_at else None,
+                            'participants_count': participants_submitted
+                        }
+                    }
+                )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Player result submitted successfully',
+                'player': {
+                    'player_id': player.id,
+                    'username': player.username,
+                    'player_name': player.player_name,
+                    'team': participant.team,
+                    'is_winner': participant.is_winner,
+                    'marks_earned': participant.marks_earned
+                },
+                'game_status': {
+                    'match_id': str(game.match_id),
+                    'participants_submitted': participants_submitted,
+                    'participants_expected': participants_expected,
+                    'status': game.status
+                }
+            })
+    
     except Exception as e:
         return JsonResponse({
             'success': False,

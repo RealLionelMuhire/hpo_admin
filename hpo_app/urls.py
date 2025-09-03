@@ -23,6 +23,7 @@ urlpatterns = [
     path('api/games/create/', views.create_game_api, name='create_game_api'),
     path('api/games/complete/', views.complete_game_api, name='complete_game_api'),
     path('api/games/submit-completed/', views.submit_completed_game_api, name='submit_completed_game_api'),
+    path('api/games/submit-player-result/', views.submit_player_result_api, name='submit_player_result_api'),
     path('api/games/<uuid:match_id>/responses/', views.get_game_responses_api, name='get_game_responses_api'),
     path('api/games/<uuid:match_id>/status/', views.get_game_status_api, name='get_game_status_api'),
     path('api/games/submit-answer/', views.submit_answer_api, name='submit_answer_api'),
