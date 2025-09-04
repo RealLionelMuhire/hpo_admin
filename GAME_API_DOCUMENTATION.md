@@ -795,6 +795,80 @@ For more advanced UI interactions, losing players can also use:
 - `/api/games/award-points/` for correct answers
 - `/api/games/record-wrong-answer/` for incorrect answers
 
+## Loser/Winner Explanation Feature
+
+### Overview
+When a game is completed and players receive questions, both correct and incorrect answers result in educational explanations being returned to enhance learning.
+
+### Workflow for Losers (Question Answerers)
+
+#### Correct Answer Flow:
+1. Loser receives question from `/api/games/submit-completed/`
+2. Frontend validates answer against `correct_answer` field
+3. If correct: Frontend calls `/api/games/award-points/`
+4. **Backend awards 1 mark AND returns explanation**
+
+#### Wrong Answer Flow:
+1. Loser receives question from `/api/games/submit-completed/`
+2. Frontend validates answer against `correct_answer` field  
+3. If incorrect: Frontend calls `/api/games/record-wrong-answer/`
+4. **Backend awards 0 marks BUT still returns explanation for learning**
+
+### Workflow for Winners (Mark Recipients)
+
+#### Automatic Mark Award:
+1. Winner submits result via `/api/games/submit-completed/`
+2. **Backend automatically awards 1 mark AND returns explanation**
+3. No additional frontend action required
+
+### Key Benefits
+
+✅ **Educational Value**: Both correct and incorrect answers provide explanations  
+✅ **Consistent Learning**: Winners and losers both receive educational content  
+✅ **No Punishment**: Wrong answers still provide learning opportunity  
+✅ **Frontend Validation**: UI handles answer checking for better UX  
+
+### Example Responses
+
+**Correct Answer (Loser gets mark + explanation):**
+```json
+{
+  "success": true,
+  "message": "Awarded 1 point(s) to bob for correct answer",
+  "result": {
+    "points_awarded": 1,
+    "question": {
+      "id": 37,
+      "explanation": "Adolescence is the stage between childhood and when one becomes a young woman or young man."
+    }
+  }
+}
+```
+
+**Wrong Answer (Loser gets 0 marks + explanation):**
+```json
+{
+  "success": true,
+  "result": {
+    "points_awarded": 0,
+    "correct_answer": "False",
+    "explanation": "A girl who has tracked her period for the past six months finds her cycle is regular with 29 days. This means her fertile days start on day 10 and end on day 20."
+  }
+}
+```
+
+**Winner (Automatic mark + explanation):**
+```json
+{
+  "success": true,
+  "response": {
+    "type": "explanation",
+    "explanation": "Congratulations on your victory!",
+    "marks_earned": 1
+  }
+}
+```
+
 ### Legacy Complete Game Workflow
 
 For backward compatibility, the system still supports submitting complete game data all at once:
