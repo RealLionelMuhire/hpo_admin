@@ -16,7 +16,7 @@ This document describes the simplified Game MVC system that allows players to pa
 - **No "question_answered" or "answer_correct" fields** needed in the submission for winners
 - **Simplified workflow** reduces code duplication and clarifies responsibilities
 
-## Post-Game Response Logic
+### Post-Game Response Logic
 
 ### Winners
 - Automatically receive 1 mark
@@ -26,8 +26,9 @@ This document describes the simplified Game MVC system that allows players to pa
 ### Losers  
 - Receive full question object including `correct_answer`
 - Frontend is responsible for answer validation
-- If correct answer: frontend calls `/api/games/award-points/` to award 1 mark
-- If wrong answer: no mark awarded
+- If correct answer: frontend calls `/api/games/award-points/` to award 1 mark **and receive explanation**
+- If wrong answer: frontend calls `/api/games/record-wrong-answer/` to record failure **and receive explanation**
+- **Both correct and incorrect answers return explanations for educational value**
 
 ## API Endpoints
 
@@ -414,14 +415,14 @@ POST /api/games/award-points/
 - Updates player's game marks and overall statistics
 - Updates game result team marks
 - Prevents duplicate point awards
-- Returns explanation for educational value
+- **Returns explanation for educational value** - Both correct and incorrect answers receive explanations
 
 ### 4b. Record Wrong Answer
 ```
 POST /api/games/record-wrong-answer/
 ```
 
-**Description**: Record a wrong answer (no points awarded) after the UI validates the answer is incorrect.
+**Description**: Record a wrong answer (no points awarded) after the UI validates the answer is incorrect. Returns the question explanation so players can learn from their mistakes.
 
 **Request Body:**
 ```json
@@ -453,6 +454,13 @@ POST /api/games/record-wrong-answer/
     }
 }
 ```
+
+**Features:**
+- Records wrong answer for player statistics tracking
+- **Returns explanation for educational value** - Players learn from incorrect answers
+- Shows correct answer for reference
+- Updates player's overall answer accuracy
+- No points awarded for incorrect answers
 
 ### 5. Get Game Status
 ```
