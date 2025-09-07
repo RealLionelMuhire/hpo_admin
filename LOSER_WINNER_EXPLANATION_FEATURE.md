@@ -10,7 +10,8 @@ This feature ensures that both winners and losers receive educational explanatio
 
 ### For Winners 🏆
 - **Automatic Process**: When winners submit their result via `/api/games/submit-completed/`
-- **Response**: Automatically receive 1 mark + explanation
+- **Response**: Automatically receive 1 mark + **random educational explanation from question database**
+- **Educational Value**: Winners get random educational content from any question for learning
 - **No Action Required**: Frontend doesn't need additional calls
 
 ### For Losers (Question Answerers) 📚
@@ -122,8 +123,13 @@ POST /api/games/record-wrong-answer/
 
 ### Test Scenario 3: Winner
 - **Input**: Winner submits result
-- **Result**: ✅ 1 mark awarded automatically + explanation provided
+- **Result**: ✅ 1 mark awarded automatically + **random educational explanation** provided
 - **Status**: ✅ WORKING
+
+**Sample Winner Explanations Received:**
+- "Gender Equality: Means all people have equal rights, equal recognition, and equal opportunities..."
+- "HIV (human immunodeficiency virus) is a virus that attacks cells that help the body fight infection..."
+- "Muri rusange, ukwezi k'umugore/umukobwa ntigukunze kujya munsi y'iminsi 21..." (Kinyarwanda)
 
 ## Sample Responses
 
@@ -154,7 +160,7 @@ POST /api/games/record-wrong-answer/
     },
     "response": {
         "type": "explanation",
-        "explanation": "Congratulations on your victory!",
+        "explanation": "Gender Equality: Means all people have equal rights, equal recognition, and equal opportunities regardless of whether they are male or female.",
         "marks_earned": 1
     },
     "game_status": {
@@ -229,5 +235,6 @@ POST /api/games/record-wrong-answer/
 ✅ **Educational Goal**: Achieved - all players learn regardless of performance  
 ✅ **API Integration**: Ready for frontend implementation  
 ✅ **Backend Logic**: Handles both scenarios correctly  
+✅ **Winner Enhancement**: Winners now receive random educational explanations from question database
 
-**Both winners and losers receive explanations for educational value!** 🎓
+**Both winners and losers receive educational explanations for maximum learning value!** 🎓

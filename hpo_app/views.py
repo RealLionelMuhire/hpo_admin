@@ -47,35 +47,26 @@ def generate_post_game_response(participant, lost_card=None):
     
     if participant.is_winner:
         # Winners get explanation (fun fact) from a question
-        if lost_card:
-            questions = Question.objects.filter(card=lost_card)
-            if questions.exists():
-                question = questions.first()
-                response_data = {
-                    'type': 'explanation',
-                    'explanation': question.explanation,
-                    'card': lost_card,
-                    'marks_earned': participant.marks_earned
-                }
-            else:
-                response_data = {
-                    'type': 'explanation',
-                    'explanation': 'Congratulations on your victory!',
-                    'marks_earned': participant.marks_earned
-                }
+        # Get random question explanation for winner
+        all_questions = Question.objects.all()
+        if all_questions.exists():
+            random_question = all_questions.order_by('?').first()
+            explanation_text = random_question.explanation
         else:
-            response_data = {
-                'type': 'explanation',
-                'explanation': 'Congratulations on your victory!',
-                'marks_earned': participant.marks_earned
-            }
+            explanation_text = 'Congratulations on your victory!'
+            
+        response_data = {
+            'type': 'explanation',
+            'explanation': explanation_text,
+            'marks_earned': participant.marks_earned
+        }
             
         # Create winner response in GameResponse model
         GameResponse.objects.create(
             game=participant.game,
             participant=participant,
             response_type='fun_fact',
-            fun_fact_text=response_data.get('explanation', 'Congratulations!')
+            fun_fact_text=explanation_text
         )
         
     else:
