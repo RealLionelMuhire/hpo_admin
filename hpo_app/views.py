@@ -1983,3 +1983,11 @@ def submit_player_result_api(request):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+@require_http_methods(["GET"])
+def test_endpoint(request):
+    """
+    Simple test endpoint that returns HTTP 200 with no content
+    """
+    return JsonResponse({}, status=200)

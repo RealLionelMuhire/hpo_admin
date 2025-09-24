@@ -1027,6 +1027,7 @@ class GameContent(models.Model):
         ('10-14', '10-14 years'),
         ('15-19', '15-19 years'),
         ('20-24', '20-24 years'),
+        ('10-24', '10-24 years'),
         ('25+', '25+ years'),
     ]
     

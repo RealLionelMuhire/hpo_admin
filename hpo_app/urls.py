@@ -42,4 +42,7 @@ urlpatterns = [
     path('api/game-content/<int:content_id>/delete/', views.delete_game_content_api, name='delete_game_content_api'),
     path('api/game-content/create/', views.create_game_content_api, name='create_game_content_api'),
     path('api/game-content/increment-usage/', views.increment_content_usage_api, name='increment_content_usage_api'),
+    
+    # Test endpoint
+    path('test/', views.test_endpoint, name='test_endpoint'),
 ]
