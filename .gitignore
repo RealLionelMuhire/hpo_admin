@@ -141,8 +141,10 @@ dmypy.json
 # Static files (will be regenerated)
 staticfiles/
 
-# Media files (consider if you want to track these)
-media/
+# Media files (uploaded content should not be tracked)
+media/*
+!media/.gitkeep
+!media/uploads/.gitkeep
 
 # Secret key and sensitive settings
 secret_key.txt

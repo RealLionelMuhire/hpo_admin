@@ -1,5 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from ckeditor_uploader.widgets import CKEditorUploadingWidget
 from .models import Question, Player, GameContent
 
 
@@ -227,11 +228,7 @@ class GameContentAdminForm(forms.ModelForm):
                 'class': 'form-control',
                 'placeholder': 'Enter main subtopic (e.g., Independence Era, Ancient History)'
             }),
-            'info': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 4,
-                'placeholder': 'Enter main content information'
-            }),
+
             'title': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'Optional title for the content'

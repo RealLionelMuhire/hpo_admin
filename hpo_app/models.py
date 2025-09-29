@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.core.validators import MinLengthValidator
+from ckeditor_uploader.fields import RichTextUploadingField
 import uuid
 
 
@@ -1089,8 +1090,9 @@ class GameContent(models.Model):
         help_text="Additional subtopics with their information. Format: [{'subtopic': 'Name', 'info': 'Content'}]"
     )
     
-    info = models.TextField(
-        help_text="Enter the main content information or educational material for the primary subtopic"
+    info = RichTextUploadingField(
+        config_name='game_content',
+        help_text="Enter the main content information or educational material for the primary subtopic. You can format text, add images, tables, and more."
     )
     
     # Additional useful fields
