@@ -1,3 +1,173 @@
+/* CKEditor enhancements */
+.field-info {
+    margin-bottom: 20px;
+}
+
+.field-info .help {
+    font-style: italic;
+    color: #666;
+    margin-bottom: 10px;
+    padding: 8px;
+    background-color: #f8f9fa;
+    border-left: 3px solid #007cba;
+}
+
+.django-ckeditor-widget {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 10px;
+}
+
+/* Enhanced image editing styles within CKEditor */
+.cke_editable img {
+    max-width: 100%;
+    height: auto;
+    border: 2px solid transparent;
+    transition: border-color 0.2s ease;
+}
+
+.cke_editable img:hover {
+    border-color: #007cba;
+    cursor: pointer;
+}
+
+.cke_editable img.image-left {
+    float: left;
+    margin: 0 15px 15px 0;
+}
+
+.cke_editable img.image-right {
+    float: right;
+    margin: 0 0 15px 15px;
+}
+
+.cke_editable img.image-center {
+    display: block;
+    margin: 15px auto;
+}
+
+.cke_editable .image-captioned {
+    display: inline-block;
+    max-width: 100%;
+}
+
+.cke_editable .image-captioned img {
+    display: block;
+    margin: 0 auto;
+}
+
+.cke_editable .image-captioned figcaption {
+    text-align: center;
+    font-style: italic;
+    color: #666;
+    font-size: 0.9em;
+    padding: 5px 0;
+    border-bottom: 1px solid #eee;
+}
+
+/* Image resize handles styling */
+.cke_image_resizer {
+    border: 2px solid #007cba !important;
+}
+
+.cke_image_resizer_wrapper {
+    position: relative;
+}
+
+/* Upload progress indicator */
+.cke_upload_loading {
+    background: rgba(0, 124, 186, 0.1);
+    border: 2px dashed #007cba;
+    padding: 20px;
+    text-align: center;
+    border-radius: 4px;
+}
+
+/* Image context menu enhancements */
+.cke_menu {
+    border-radius: 4px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Dialog enhancements */
+.cke_dialog {
+    border-radius: 8px !important;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2) !important;
+}
+
+.cke_dialog_title {
+    background: linear-gradient(to right, #007cba, #0096dc) !important;
+    color: white !important;
+    padding: 12px 20px !important;
+    border-radius: 8px 8px 0 0 !important;
+}
+
+/* Close button enhancement - Force close functionality */
+.cke_dialog_close_button {
+    background: #dc3545 !important;
+    color: white !important;
+    border-radius: 50% !important;
+    width: 30px !important;
+    height: 30px !important;
+    line-height: 28px !important;
+    text-align: center !important;
+    font-weight: bold !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    z-index: 10001 !important;
+    position: relative !important;
+    font-size: 16px !important;
+}
+
+.cke_dialog_close_button:hover {
+    background: #c82333 !important;
+    transform: scale(1.2) !important;
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.4) !important;
+}
+
+.cke_dialog_close_button:active {
+    transform: scale(0.95) !important;
+}
+
+/* Force remove any pointer-events that might block clicking */
+.cke_dialog_close_button * {
+    pointer-events: none !important;
+}
+
+/* Cancel button styling */
+.cke_dialog_ui_button_cancel {
+    background: #6c757d !important;
+    color: white !important;
+    border: none !important;
+    padding: 8px 16px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+}
+
+.cke_dialog_ui_button_cancel:hover {
+    background: #5a6268 !important;
+}
+
+/* OK button styling */
+.cke_dialog_ui_button_ok {
+    background: #007cba !important;
+    color: white !important;
+    border: none !important;
+    padding: 8px 16px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+}
+
+.cke_dialog_ui_button_ok:hover {
+    background: #0056a3 !important;
+}
+
+/* Dialog overlay */
+.cke_dialog_background_cover {
+    background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
 .subtopic-container {
     border: 1px solid #ddd;
     border-radius: 4px;

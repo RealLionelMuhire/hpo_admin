@@ -59,6 +59,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
+    'ckeditor',
+    'ckeditor_uploader',
     'hpo_app',
 ]
 
@@ -222,3 +224,96 @@ CORS_ALLOW_METHODS = [
     'POST',
     'PUT',
 ]
+
+# CKEditor Configuration
+CKEDITOR_UPLOAD_PATH = "uploads/"
+CKEDITOR_IMAGE_BACKEND = "pillow"
+CKEDITOR_JQUERY_URL = 'https://ajax.googleapis.com/ajax/libs/jquery/2.2.4/jquery.min.js'
+
+# File upload restrictions
+CKEDITOR_ALLOW_NONIMAGE_FILES = True
+CKEDITOR_RESTRICT_BY_USER = True  # Restrict uploads to authenticated users
+CKEDITOR_BROWSE_SHOW_DIRS = True
+CKEDITOR_RESTRICT_BY_DATE = True
+
+# Allowed file extensions
+CKEDITOR_UPLOAD_SLUGIFY_FILENAME = True
+CKEDITOR_FILENAME_GENERATOR = 'utils.get_filename'
+
+CKEDITOR_CONFIGS = {
+    'default': {
+        'toolbar': 'full',
+        'height': 300,
+        'width': '100%',
+    },
+    'game_content': {
+        'toolbar': 'Custom',
+        'toolbar_Custom': [
+            ['Bold', 'Italic', 'Underline', 'Strike'],
+            ['NumberedList', 'BulletedList', '-', 'Outdent', 'Indent', '-', 'JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock'],
+            ['Link', 'Unlink'],
+            ['RemoveFormat', 'Source'],
+            ['Styles', 'Format', 'Font', 'FontSize'],
+            ['TextColor', 'BGColor'],
+            ['Smiley', 'SpecialChar'], 
+            ['Image', 'Flash', 'Table', 'HorizontalRule'],
+            ['Maximize', 'ShowBlocks'],
+        ],
+        'height': 400,
+        'width': '100%',
+        'filebrowserWindowWidth': 940,
+        'filebrowserWindowHeight': 725,
+        
+        # Enhanced image editing capabilities
+        'image2_alignClasses': ['image-left', 'image-center', 'image-right'],
+        'image2_disableResizer': False,
+        'image2_prefillDimensions': False,
+        'image2_captionedClass': 'image-captioned',
+        
+        # File browser settings for uploads
+        'filebrowserUploadUrl': '/ckeditor/upload/',
+        'filebrowserUploadMethod': 'form',
+        'filebrowserImageUploadUrl': '/ckeditor/upload/',
+        'filebrowserFlashUploadUrl': '/ckeditor/upload/',
+        
+        # Additional image settings
+        'allowedContent': True,  # Allow all HTML content
+        'extraAllowedContent': 'img[*]{*}(*);div[*]{*}(*);span[*]{*}(*)',
+        
+        # Context menu for right-click editing
+        'contextmenu': 'link,unlink,anchor,image,flash,table,tablerow,tablecolumn,tablecell',
+        
+        # Plugins for enhanced functionality
+        'extraPlugins': 'uploadimage,image2,tableresize,contextmenu',
+        'removePlugins': 'image',  # Remove old image plugin, use image2
+        
+        # Dialog behavior settings - Force disable all confirmations
+        'dialog_noConfirmCancel': True,
+        'dialog_backgroundCoverColor': 'rgba(0,0,0,0.5)',
+        'dialog_backgroundCoverOpacity': 0.5,
+        'dialog_startupFocus': False,
+        'dialog_buttonsOrder': 'OS',
+        
+        # Additional settings to prevent confirmation dialogs
+        'disableNativeSpellChecker': False,  
+        'ignoreEmptyParagraph': True,
+        'fillEmptyBlocks': False,
+        
+        # Image upload settings
+        'uploadUrl': '/ckeditor/upload/',
+        'imageUploadUrl': '/ckeditor/upload/',
+        
+        # Format options
+        'format_tags': 'p;h1;h2;h3;h4;h5;h6;pre;address;div',
+        
+        # Enhanced editing features
+        'resize_enabled': True,
+        'resize_dir': 'both',
+        'resize_minWidth': 200,
+        'resize_minHeight': 100,
+    },
+}
+
+# File size limits (5MB for images, 10MB for other files)
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024  # 10MB
